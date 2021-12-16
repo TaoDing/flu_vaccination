@@ -1,0 +1,2076 @@
+---
+title: "流感疫苗课题：TIV和宿主菌群的相互影响分析2"
+output: 
+html_document:
+      toc: yes
+      theme: cerulean
+---
+
+          
+```{r setup, include=FALSE}
+	knitr::opts_chunk$set(echo = TRUE, warning = FALSE, tidy=TRUE, collapse=TRUE)
+```
+
+# 4.呼吸道菌群与肠道菌群对TIV的差异性应对
+
+## 4.1 接种TIV对肠道、咽部菌群的多样性影响
+
+```{r}
+library(microbiome)
+library(phyloseq)
+library(vegan)
+library(ggplot2)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(car)
+library(igraph)
+library(RCy3)
+library(patchwork)
+
+load('C:/Users/hui/Desktop/TIV16S2020.lihui/processing.data/physeq.tiv16sall.Rdata')
+  physeq<- physeq.tiv16sall
+  titer<- read.csv("C:/Users/hui/Desktop/TIV16S2020.lihui/processing.data/meta_immune_data.csv",header = T, sep = ',',row.names = 1)
+  sub_titer<- subset(titer, Grade=="G_2018"&h1n1_pre_group=="Negative")
+  sub_titer1<- sub_titer[, c("pre_H1N1", "diff_H1N1")]
+  sub_titer1$group<- sub_titer1$diff_H1N1
+  sub_titer1$group[sub_titer1$group >5] = "high"
+  sub_titer1$group[sub_titer1$group <6] = "low"
+  student_id<- rownames(sub_titer1)
+  physeq.tib3<- subset_samples(physeq, type=="fecal"&national=="tibetan"& grade=="grade_18"&stage=="stage1")
+  physeq.tib<-  physeq.tib3
+  physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+  sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+  sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+  physeq.fp<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+
+physeq.fp<- subset_samples(physeq, national=="tibetan")
+physeq.fp<-  prune_taxa(taxa_sums(physeq.fp) > 0, physeq.fp)
+fp.sh <- plot_richness(physeq.fp, "stage", measures= "Shannon")
+shannon.oroph <- fp.sh$data
+shannon.oroph$groups <- paste(shannon.oroph$grade, shannon.oroph$stage)
+shannon1<- subset(shannon.oroph, type=="fecal")
+shannon2<- subset(shannon.oroph, type=="oroph")
+shannon3<- subset(shannon.oroph, type=="nasal")
+shannon4<- subset(shannon.oroph, type=="saliva")
+shannon1a <- aggregate(shannon1$value,list(shannon1$groups),mean)
+shannon2a <- aggregate(shannon2$value,list(shannon2$groups),mean)
+shannon3a <- aggregate(shannon3$value,list(shannon3$groups),mean)
+shannon4a <- aggregate(shannon4$value,list(shannon4$groups),mean)
+rownames(shannon1a) <- shannon1a$Group.1
+rownames(shannon2a) <- shannon2a$Group.1
+rownames(shannon3a) <- shannon3a$Group.1
+rownames(shannon4a) <- shannon4a$Group.1
+total.test<-merge(shannon1a,shannon2a,by="Group.1", all=T)
+total.test1<-merge(shannon3a,shannon4a,by="Group.1", all=T)
+total <- merge(total.test,total.test1,by="Group.1", all=T)
+rownames(total) <- total$Group.1
+total <- total[,-1]
+
+colnames(total) <- c("Fecal", "Oroph", "Nasal", "Saliva")
+pheatmap(t(total), cluster_rows  = FALSE,  cluster_cols  = FALSE, color = colorRampPalette(colors = c("blue","white","red"))(10), gaps_col = c(3,8,13))
+
+shannon.oroph$tiv[shannon.oroph$stage %in% c("stage1", "stage2", "stage3")] = "TIV1"
+shannon.oroph$tiv[shannon.oroph$stage %in% c("stage4", "stage5")] = "TIV2"
+
+data_m_sd_mean <- shannon.oroph %>% group_by(groups, type, grade, tiv, stage) %>% dplyr::summarise(sd=sd(value), value=mean(value))
+data_m_sd_mean <- as.data.frame(data_m_sd_mean)
+data_m_sd_mean$TIV <- paste(data_m_sd_mean$grade, data_m_sd_mean$tiv)
+
+data_m_sd_mean.fo<- subset(data_m_sd_mean, type %in% c("fecal", "oroph"))                  
+
+col5<- c("#003399", "black","#CC0033", "#1F6F43", "#FF6600")
+
+p1.fo<- ggplot(data_m_sd_mean.fo, aes(x=TIV, y=value)) + 
+    geom_bar(stat="identity", position="dodge", aes(fill=stage)) +
+    scale_fill_manual(values=col5)+
+    geom_errorbar(aes(x=TIV, y=value,fill=stage,ymin=value-sd,ymax=value+sd), width=0.2, position=position_dodge(width=0.75)) +
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14),title=element_text(size=14,color="#4F4F4F"))+
+    theme(axis.text.x = element_text(angle = 40, hjust = 0.9, vjust=1))+
+    facet_wrap(.~type,ncol=1)+
+    theme(strip.text = element_text(colour = 'black', face = 'bold', size = rel(1.2)), strip.background = element_rect(fill = 'white', colour = 'black', size = rel(2), linetype = 1))+
+    labs(y="Shannon Index", x="")+
+    theme(legend.position='none')
+
+p1.fo  
+
+change<- read.csv("C:/Users/hui/Desktop/shannon.bray.17.18.5times.csv",header = T, sep = ',', row.names = 1)
+change.2018 <- subset(change, grade=="grade_18")
+p.x<- ggplot(data=change.2018, aes(x = stages, y = Shannon, color=type)) +
+    geom_point(alpha=0.6, size=2)+ 
+    geom_smooth(method="loess", size=2)+ 
+    scale_colour_manual(values=c("black", "red")) +
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))
+p.x # fig021
+
+col5<- c("#003399", "black","#CC0033", "#1F6F43", "#FF6600")
+my_comparisons <- list(c("stage1","stage2"), c("stage1","stage3"), c("stage3","stage4"),c("stage4","stage5"),c("stage1","stage4"))
+p2.fo<- ggplot(data=change.2018, aes(x = stage, y = Shannon, group=stages, color=stage)) +
+    geom_line(aes(group = student_id), size = 1, color="grey")+
+    geom_point(alpha=0.6, size=2)+ 
+    geom_boxplot(alpha=0.6)+
+    scale_colour_manual(values=col5) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    facet_wrap(.~type,ncol=1)+
+    stat_compare_means(comparisons = my_comparisons, paired = TRUE, color="black")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14,angle = 40, hjust = 0.9, vjust=1),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(strip.text = element_text(colour = 'black', face = 'bold', size = rel(1.2)), strip.background = element_rect(fill = 'white', colour = 'black', size = rel(2), linetype = 1))+
+    labs(y="Shannon Index", x="")
+
+p2.fo # fig020
+
+```
+
+
+## 4.2 接种疫苗对肠道、咽部菌群群体离散程度的影响
+
+```{r}
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan" & grade =="grade_18")
+call<- as.data.frame(table(meta(physeq.tib)$student_id))
+id<- call$Var1[which(call$Freq == 5)]
+sample_data(physeq.tib)$human <- get_variable(physeq.tib, "student_id") %in% id
+sub_physeq.tib<- subset_samples(physeq.tib, human=="TRUE")
+
+physeq.tib1<- subset_samples(sub_physeq.tib, stage %in% c("stage1"))
+physeq.tib1p<-  prune_taxa(taxa_sums(physeq.tib1) > 0, physeq.tib1)
+div.neg1<- divergence(physeq.tib1p, apply(abundances(physeq.tib1p), 1, median), method = "bray")
+
+physeq.tib2<- subset_samples(sub_physeq.tib, stage %in% c("stage2"))
+physeq.tib2p<-  prune_taxa(taxa_sums(physeq.tib2) > 0, physeq.tib2)
+div.neg2<- divergence(physeq.tib2p, apply(abundances(physeq.tib2p), 1, median), method = "bray")
+
+physeq.tib3<- subset_samples(sub_physeq.tib, stage %in% c("stage3"))
+physeq.tib3p<-  prune_taxa(taxa_sums(physeq.tib3) > 0, physeq.tib3)
+div.neg3<- divergence(physeq.tib3p, apply(abundances(physeq.tib3p), 1, median), method = "bray")
+
+physeq.tib4<- subset_samples(sub_physeq.tib, stage %in% c("stage4"))
+physeq.tib4p<-  prune_taxa(taxa_sums(physeq.tib4) > 0, physeq.tib4)
+div.neg4<- divergence(physeq.tib4p, apply(abundances(physeq.tib4p),1, median), method = "bray")
+
+physeq.tib5<- subset_samples(sub_physeq.tib, stage %in% c("stage5"))
+physeq.tib5p<-  prune_taxa(taxa_sums(physeq.tib5) > 0, physeq.tib5)
+div.neg5<- divergence(physeq.tib5p, apply(abundances(physeq.tib5p), 1, median), method = "bray")
+
+meta <- meta(sub_physeq.tib)
+divergence <- unlist(c(div.neg1, div.neg2, div.neg3, div.neg4, div.neg5))
+data.all <- cbind(meta, divergence)
+my_comparisons <- list(c("stage1", "stage2"),c("stage1", "stage3"), c("stage4", "stage5"),c("stage1", "stage4"),c("stage1", "stage5"))
+oroph <- ggplot(data.all, aes(x=stage,  y=divergence, color=stage), shape=8 ) +
+    geom_boxplot(aes(x=stage), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=stage), fun.y=mean, geom="point") +
+    theme(axis.title.x =element_blank())+
+    scale_colour_manual(values=col5) +
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = TRUE, color="black")+
+    labs(y="Divergence")
+
+
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan" & grade =="grade_18")
+call<- as.data.frame(table(meta(physeq.tib)$student_id))
+id<- call$Var1[which(call$Freq == 5)]
+sample_data(physeq.tib)$human <- get_variable(physeq.tib, "student_id") %in% id
+sub_physeq.tib<- subset_samples(physeq.tib, human=="TRUE")
+
+physeq.tib1<- subset_samples(sub_physeq.tib, stage %in% c("stage1"))
+physeq.tib1p<-  prune_taxa(taxa_sums(physeq.tib1) > 0, physeq.tib1)
+div.neg1<- divergence(physeq.tib1p, apply(abundances(physeq.tib1p), 1, median), method = "bray")
+
+physeq.tib2<- subset_samples(sub_physeq.tib, stage %in% c("stage2"))
+physeq.tib2p<-  prune_taxa(taxa_sums(physeq.tib2) > 0, physeq.tib2)
+div.neg2<- divergence(physeq.tib2p, apply(abundances(physeq.tib2p), 1, median), method = "bray")
+
+physeq.tib3<- subset_samples(sub_physeq.tib, stage %in% c("stage3"))
+physeq.tib3p<-  prune_taxa(taxa_sums(physeq.tib3) > 0, physeq.tib3)
+div.neg3<- divergence(physeq.tib3p, apply(abundances(physeq.tib3p), 1, median), method = "bray")
+
+physeq.tib4<- subset_samples(sub_physeq.tib, stage %in% c("stage4"))
+physeq.tib4p<-  prune_taxa(taxa_sums(physeq.tib4) > 0, physeq.tib4)
+div.neg4<- divergence(physeq.tib4p, apply(abundances(physeq.tib4p),1, median), method = "bray")
+
+physeq.tib5<- subset_samples(sub_physeq.tib, stage %in% c("stage5"))
+physeq.tib5p<-  prune_taxa(taxa_sums(physeq.tib5) > 0, physeq.tib5)
+div.neg5<- divergence(physeq.tib5p, apply(abundances(physeq.tib5p), 1, median), method = "bray")
+
+meta <- meta(sub_physeq.tib)
+divergence <- unlist(c(div.neg1, div.neg2, div.neg3, div.neg4, div.neg5))
+data.all <- cbind(meta, divergence)
+my_comparisons <- list(c("stage1", "stage2"),c("stage1", "stage3"), c("stage4", "stage5"),c("stage1", "stage4"),c("stage1", "stage5"))
+fecal <- ggplot(data.all, aes(x=stage,  y=divergence, color=stage), shape=8 ) +
+    geom_boxplot(aes(x=stage), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=stage), fun.y=mean, geom="point") +
+    theme(axis.title.x =element_blank())+
+    scale_colour_manual(values=col5) +
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = TRUE, color="black")+
+    labs(y="Divergence")
+
+oroph | fecal #fig022
+
+```
+
+## 4.3 接种疫苗导致的咽部、肠道、唾液和鼻腔的核心物种变化
+
+```{r}
+library(pheatmap)
+
+genus<- read.csv('C:/Users/hui/Desktop/TIV16S2020.lihui/all.genus.csv',header = T, sep = ',',row.names = 1)
+
+meta <- meta(physeq)
+meta$groups <- paste(meta$grade, meta$stage)
+
+oroph <- subset(meta, type=="oroph" & national=="tibetan")
+genus.oroph <- genus[,rownames(oroph)]
+genus.oroph.core<- genus.oroph[core_members(genus.oroph, detection = 0.0005, prevalence = 0.50),]
+genus.test<- aggregate(t(genus.oroph.core),list(oroph$groups),mean)
+rownames(genus.test)<- genus.test$Group.1
+test.genus <- genus.test[,-1]
+t2 <- t(test.genus)
+pheatmap(t2, cluster_cols = FALSE, scale= "row", color = colorRampPalette(colors = c("blue","white","red"))(10), gaps_col = c(3,8,13)) # fig023
+
+fecal <- subset(meta, type=="fecal" & national=="tibetan")
+genus.fecal <- genus[,rownames(fecal)]
+genus.fecal.core<- genus.fecal[core_members(genus.fecal, detection = 0.0005, prevalence = 0.50),]
+genus.test<- aggregate(t(genus.fecal.core),list(fecal$groups),mean)
+rownames(genus.test)<- genus.test$Group.1
+test.genus <- genus.test[,-1]
+t2 <- t(test.genus)
+pheatmap(t2, cluster_cols = FALSE, scale= "row", color = colorRampPalette(colors = c("blue","white","red"))(10), gaps_col = c(3,8,13))# fig024
+
+saliva <- subset(meta, type=="saliva" & national=="tibetan")
+genus.saliva <- genus[,rownames(saliva)]
+genus.saliva.core<- genus.saliva[core_members(genus.saliva, detection = 0.0005, prevalence = 0.50),]
+genus.test<- aggregate(t(genus.saliva.core),list(saliva$groups),mean)
+rownames(genus.test)<- genus.test$Group.1
+test.genus <- genus.test[,-1]
+t2 <- t(test.genus)
+pheatmap(t2, cluster_cols = FALSE, scale= "row", color = colorRampPalette(colors = c("blue","white","red"))(10), gaps_col = c(2,4))# fig025
+
+nasal <- subset(meta, type=="nasal" & national=="tibetan")
+genus.nasal <- genus[,rownames(nasal)]
+genus.nasal.core<- genus.nasal[core_members(genus.nasal, detection = 0.0005, prevalence = 0.50),]
+genus.test<- aggregate(t(genus.nasal.core),list(nasal$groups),mean)
+rownames(genus.test)<- genus.test$Group.1
+test.genus <- genus.test[,-1]
+t2 <- t(test.genus)
+pheatmap(t2, cluster_cols = FALSE, scale= "row", color = colorRampPalette(colors = c("blue","white","red"))(10), gaps_col = c(2,4))# fig026
+
+```
+
+## 4.4 接种疫苗导致的咽部、肠道β多样性变化
+
+```{r}
+# bray-curtis距离的PCOA分析
+physeq.tib1<- subset_samples(physeq, type =="oroph" & national=="tibetan" & grade=="grade_18")
+GP.ord <- ordinate(physeq.tib1, "PCoA", "bray")
+data1<- plot_ordination(physeq.tib1, GP.ord, type="samples", color="stage", shape="grade")
+data2 <- data1$data
+pb.o<- ggscatter(data2, x= "Axis.1", y = "Axis.2", 
+          color = "stage", palette = col5,  # 任何存在的palette都可以，不仅仅是brewer.pal中的，可以调用ggsci中的各种sci-fi主题颜色包！
+          ellipse = TRUE,  # 设置是否需要confidence ellipses
+          mean.point = TRUE, star.plot = FALSE,   # 设置confidence ellipses中心是否与所有点连线
+          ellipse.level = 0.2,  # 设置confidence level可以调整椭圆的大小
+          ggtheme = theme_minimal(),
+          rug = TRUE)+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+pb.o # fig027
+
+physeq.tib1<- subset_samples(physeq, type =="fecal" & national=="tibetan" & grade=="grade_18")
+GP.ord <- ordinate(physeq.tib1, "PCoA", "bray")
+data1<- plot_ordination(physeq.tib1, GP.ord, type="samples", color="stage", shape="grade")
+data2 <- data1$data
+pb.f<- ggscatter(data2, x= "Axis.1", y = "Axis.2", 
+          color = "stage", palette = col5,
+          ellipse = TRUE,  # 设置是否需要confidence ellipses
+          mean.point = TRUE, star.plot = FALSE,   # 设置confidence ellipses中心是否与所有点连线
+          ellipse.level = 0.2,  # 设置confidence level可以调整椭圆的大小
+          ggtheme = theme_minimal(),
+          rug = TRUE)+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+
+pb.f #fig028
+
+# Jaccard距离的PCOA分析
+
+physeq.tib1<- subset_samples(physeq, type =="oroph" & national=="tibetan" & grade=="grade_18")
+GP.ord <- ordinate(physeq.tib1, "PCoA", "jaccard", binary = T)
+data1<- plot_ordination(physeq.tib1, GP.ord, type="samples", color="stage", shape="grade")
+data2 <- data1$data
+pj.o<- ggscatter(data2, x= "Axis.1", y = "Axis.2", 
+          color = "stage", palette = col5,  # 任何存在的palette都可以，不仅仅是brewer.pal中的，可以调用ggsci中的各种sci-fi主题颜色包！
+          ellipse = TRUE,  # 设置是否需要confidence ellipses
+          mean.point = TRUE, star.plot = FALSE,   # 设置confidence ellipses中心是否与所有点连线
+          ellipse.level = 0.2,  # 设置confidence level可以调整椭圆的大小
+          ggtheme = theme_minimal(),
+          rug = TRUE)+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+
+pj.o #fig029
+
+physeq.tib1<- subset_samples(physeq, type =="fecal" & national=="tibetan" & grade=="grade_18")
+GP.ord <- ordinate(physeq.tib1, "PCoA", "jaccard", binary = T)
+data1<- plot_ordination(physeq.tib1, GP.ord, type="samples", color="stage", shape="grade")
+data2 <- data1$data
+pj.f<- ggscatter(data2, x= "Axis.1", y = "Axis.2", 
+          color = "stage", palette = col5,
+          ellipse = TRUE,  # 设置是否需要confidence ellipses
+          mean.point = TRUE, star.plot = FALSE,   # 设置confidence ellipses中心是否与所有点连线
+          ellipse.level = 0.2,  # 设置confidence level可以调整椭圆的大小
+          ggtheme = theme_minimal(),
+          rug = TRUE)+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+
+
+pj.f #fig030
+
+```
+
+# 5. 接种疫苗重塑咽部菌群
+
+## 5.1 接种疫苗重塑咽部菌群a:咽部community type转变
+
+```{r}
+#Community types
+library(vegan)
+library(picante)
+library(phyloseq)
+library(ggplot2)
+library(GUniFrac)
+library(plyr)
+library(ggpubr)
+library(microbiome)
+library(patchwork)
+library(nlme)
+library(DirichletMultinomial)
+library(reshape2)
+library(ggalluvial)
+
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18"))
+meta <- meta(physeq.tib18o)
+genus.18o <- genus[, rownames(meta)]
+
+pseq.comp <- genus.18o
+gp<- pseq.comp[which(rowSums(pseq.comp) > 3),]
+
+gp2<- apply(gp,2,as.numeric)
+rownames(gp2)<- rownames(gp)
+count <- as.matrix(t(gp2*10000))
+fit <- mclapply(1:5, dmn, count = count, verbose=TRUE)
+lplc <- sapply(fit, laplace) # AIC / BIC / Laplace
+aic  <- sapply(fit, AIC) # AIC / BIC / Laplace
+bic  <- sapply(fit, BIC) # AIC / BIC / Laplace
+#plot(lplc, type="b", xlab="Number of Dirichlet Components", ylab="Model Fit")
+#lines(aic, type="b", lty = 2)
+#lines(bic, type="b", lty = 3)
+best <- fit[[which.min(lplc)]]
+mixturewt(best)
+ass <- apply(mixture(best), 1, which.max)
+
+# for (k in seq(ncol(fitted(best)))) {
+#     d <- melt(fitted(best))
+#     colnames(d) <- c("OTU", "cluster", "value")
+#     d <- subset(d, cluster == k) %>%
+#         # Arrange OTUs by assignment strength
+#         arrange(value) %>%
+#         mutate(OTU = factor(OTU, levels = unique(OTU))) %>%
+#         # Only show the most important drivers
+#         filter(abs(value) > quantile(abs(value), 0.5))     
+#     
+#     p <- ggplot(d, aes(x = OTU, y = value)) +
+#         geom_bar(stat = "identity") +
+#         coord_flip() +
+#         labs(title = paste("Top drivers: community type", k))
+#     print(p)
+# }
+
+rp<- cbind(t(gp), meta)
+rp$ass<- ass
+##plot community
+meta$ass <- ass
+meta$Type <-as.factor(meta$ass)
+p.c1<- ggplot(meta, aes(x = stage, stratum =Type, alluvium = student_id, fill = Type, label = Type)) +
+  theme_bw()+
+    scale_fill_brewer(type= "qual", palette = "Set2") +
+    geom_flow(stat ="alluvium", lode.guidance = "frontback",color ="darkgray") +
+    geom_stratum() 
+p.c1 # fig031
+
+rp.data <- cbind(rp[,c(1:14)], meta[,c(3,5)])
+test <- melt(rp.data)
+stages<- substr(test$stage,6,6)
+test$stages <- as.numeric(stages)
+palette <- c('#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#cab2d6','#fdbf6f','#ff7f00','#e31a1c','#6a3d9a','#ffff99','#b15928','black','#018571')
+p.c2<- ggplot(data=test, aes(x = stages, y = value, group=variable, color=variable)) +
+    scale_y_continuous(trans = "log10")+
+    geom_smooth(aes(group = variable,color=variable), method = 'loess', size = 1.5)+
+    geom_jitter(alpha=0.2, size=1)+ 
+    scale_color_manual(values=palette) +
+    stat_summary()+
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y = "Relative Abundance (log10)", x = "")
+
+p.c2 # fig032
+
+```
+
+## 5.2 接种疫苗重塑咽部菌群b：物种的失去与获得
+
+```{r}
+library(reshape2)
+library(ggplot2)
+library(cowplot)
+library(ggrepel)
+
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18"))
+physeq.op<-  prune_taxa(taxa_sums(physeq.tib18o) > 0, physeq.tib18o)
+otus<- physeq.op@otu_table@.Data
+
+out1 <- vector("list", 45)
+out2 <- vector("list", 45)
+number1<- c(rep(0,45)) 
+number2<- c(rep(0,45))
+
+for (i in 1:9){
+    test<- as.data.frame(otus[, c(paste0("FVS1180", i),paste0("FVS3180", i))][which(rowSums(otus[, c(paste0("FVS1180", i),paste0("FVS3180", i))]) != 0),])
+    out1[[i]]<- rownames(test[which(test[,1] == "0"),])
+    out2[[i]]<- rownames(test[which(test[,2] == "0"),])
+    number1[i]<- nrow(test[which(test[,1] != "0"),]) 
+    number2[i]<- nrow(test[which(test[,2] != "0"),]) 
+}
+
+for (i in 10:45){
+    test<- as.data.frame(otus[, c(paste0("FVS118", i),paste0("FVS318", i))][which(rowSums(otus[, c(paste0("FVS118", i),paste0("FVS318", i))]) != 0),])
+    out1[[i]] <- rownames(test[which(test[,1] == "0"),])
+    out2[[i]] <-rownames(test[which(test[,2] == "0"),])
+    number1[i]<- nrow(test[which(test[,1] != "0"),]) 
+    number2[i]<- nrow(test[which(test[,2] != "0"),])
+}
+
+acquire<- lengths(out1)/number2
+lose<- lengths(out2)/number1
+
+meta <- meta(physeq.op)
+test <- subset(meta, stage=="stage1")
+test$Acquire <- acquire
+test$Lose <- lose
+test$student_id <- factor(test$student_id , levels = test$student_id[order(test$Lose)])
+test1 <- melt(test)
+
+cl <- c('#8c510a','#01665e')
+p.al1<- ggplot(data=test1, aes(x = student_id, y = value, color=variable)) +
+    geom_point(size=2)+
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    scale_color_manual(values=cl)+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme_bw()+
+    theme(legend.text = element_text(size=12),
+        legend.position = c(0.15,0.85),legend.title=element_blank()
+    )+
+    theme(axis.text.x = element_text(angle=90, hjust=1, vjust=.5))+
+    background_grid(major = "xy", minor = "none")+
+    theme(axis.text.y = element_text(size=12))+
+    labs(y = "ASVs %", x = "")
+p.al1 #fig033
+
+acquire1 <- as.data.frame(table(unlist(out1)))
+test3 <- otus[as.character(acquire1$Var1), rownames(subset(meta, stage=="stage3"))]
+f<-function(x) sum(x!=0)
+acquire.3<- apply(t(test3),2,f)
+taxa<- as.data.frame(physeq.op@tax_table@.Data)
+sub_taxa.acquire <- taxa[as.character(acquire1$Var1),]
+sub_taxa.acquire$acquire.asv <- acquire1$Freq
+sub_taxa.acquire$acquire.all <- acquire1$Freq*45/acquire.3
+sub_taxa.acquire$mean<- rowMeans(test3)/10
+sub_taxa.acquire$asv<- rownames(sub_taxa.acquire)
+
+sub_acquire<- sub_taxa.acquire[,c(9,10)]
+sub_acquire$group <- "Acquire"
+
+sub_taxa.acquire<- sub_taxa.acquire[which(sub_taxa.acquire$acquire.asv >=3),]
+sub_taxa.acquire$genus <- paste(sub_taxa.acquire$Genus, "ASV")
+sub_taxa.acquire$genus[-which(sub_taxa.acquire$genus %in% c("g_Ralstonia ASV", "g_Leptotrichia ASV") )] = NA
+sub_taxa.acquire$asv <- factor(sub_taxa.acquire$asv , levels = sub_taxa.acquire$asv[order(sub_taxa.acquire$acquire.all)])
+test<- melt(sub_taxa.acquire)
+test$genus[which(test$variable != "acquire.asv")] = NA
+
+col <- c("black","#009165", "#d54f00")
+
+ggplot(data=test, aes(x = asv, y = value, color=variable)) +
+    geom_line(aes(group=variable), size=1)+
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme_bw()+
+    theme(axis.text.x = element_blank(),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    labs(y = "Number of students", x = "ASVs")+
+    scale_color_manual(values=col)+
+    geom_text_repel(aes(asv, value,label=test$genus),force=20,color="red",point.padding = 0.5,hjust = 0.5, arrow = arrow(length = unit(0.01, "npc"), type = "open", ends = "last"),segment.color="grey20",segment.size=0.2,segment.alpha=0.8,nudge_y=0.01)
+
+#fig033
+
+lose1 <- as.data.frame(table(unlist(out2)))
+test1 <- otus[as.character(lose1$Var1), rownames(subset(meta, stage=="stage1"))]
+f<-function(x) sum(x!=0)
+lose.1<- apply(t(test1),2,f)
+taxa<- as.data.frame(physeq.op@tax_table@.Data)
+sub_taxa.lose <- taxa[as.character(lose1$Var1),]
+sub_taxa.lose$lose.asv <- lose1$Freq
+sub_taxa.lose$lose.all <- lose1$Freq*45/lose.1
+sub_taxa.lose$mean<- rowMeans(test1)/10
+sub_taxa.lose$asv<- rownames(sub_taxa.lose)
+
+sub_lose<- sub_taxa.lose[,c(9,10)]
+sub_lose$group <- "Lose"
+
+sub_taxa.lose<- sub_taxa.lose[which(sub_taxa.lose$lose.asv >=3),]
+sub_taxa.lose$genus <- paste(sub_taxa.lose$Genus, "ASV")
+sub_taxa.lose$genus[-which(sub_taxa.lose$genus %in% c("g_Acinetobacter ASV", "g_Moraxella ASV") )] = NA
+sub_taxa.lose$asv <- factor(sub_taxa.lose$asv , levels = sub_taxa.lose$asv[order(sub_taxa.lose$lose.all)])
+test<- melt(sub_taxa.lose)
+test$genus[which(test$variable != "lose.asv")] = NA
+
+col <- c("black","#009165", "#d54f00")
+
+p.al3<- ggplot(data=test, aes(x = asv, y = value, color=variable)) +
+    geom_line(aes(group=variable), size=1)+
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme_bw()+
+    theme(axis.text.x = element_blank(),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    labs(y = "Number of students", x = "ASVs")+
+    scale_color_manual(values=col)+
+    geom_text_repel(aes(asv, value,label=test$genus),force=20,color="red",point.padding = 0.5,hjust = 0.5, arrow = arrow(length = unit(0.01, "npc"), type = "open", ends = "last"),segment.color="grey20",segment.size=0.2,segment.alpha=0.8,nudge_y=0.01)
+
+p.al3#fig035
+
+cl2 <- c('#01665e','#8c510a')
+sub_all <- rbind(sub_acquire, sub_lose)
+sub_all$group <- factor(sub_all$group , levels =c( "Lose","Acquire"))
+
+ggplot(sub_all, aes(x=mean, fill=group)) +
+    geom_histogram(binwidth=1, alpha=.7, position="identity")+
+    scale_fill_manual(values=cl2)+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=12) ,axis.title.x=element_blank(),axis.title.y=element_blank()) + 
+    scale_y_log10(oob = scales::squish_infinite)
+
+
+```
+
+## 5.3 咽部丧失性物种的动向
+
+```{r}
+#失去后是否恢复
+```
+
+## 5.3 咽部获得性物种的来源
+
+```{r}
+#肠道、唾液、鼻腔等部位菌群对咽部菌群重塑的影响
+```
+
+# 6. 接种疫苗对咽部耐药组、肠道益生菌的影响
+
+```{r}
+#基于宏基因组数据的挖掘，在时间序列上的动态
+```
+
+# 接种疫苗对宿主菌群影响的早期结果
+
+##1 接种疫苗对肠道和咽部菌群多样性影响
+
+```{r}
+
+#载入疫苗接种和基本信息数据library(ggplot2)
+library(plyr)
+library(readr)
+library(reshape2)
+library(patchwork) #拼图
+library(cowplot)
+library(ggpubr) #统计
+	
+
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan" & grade !="grade_19" & stage %in% c("stage1", "stage3", "stage4", "stage5"))
+physeq.fp<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+
+fp.sh <- plot_richness(physeq.fp, "stage", measures= "Shannon")
+shannon.oroph <- fp.sh$data$value
+
+titer2 <- titer[as.character(fp.sh$data$student_id),]
+oroph.data<- cbind(fp.sh$data[,c(3,5,6)], shannon.oroph, titer2)
+
+oroph.data13<- subset(oroph.data, stage %in% c("stage1", "stage3") & diff_H1N1 >= 0)
+oroph.data13.t<- subset(oroph.data13, student_id %in% as.character(intersect(subset(oroph.data13, stage=="stage1")$student_id, subset(oroph.data13, stage=="stage3")$student_id)))
+shannon.change <- subset(oroph.data13.t, stage == "stage3")$shannon.oroph - subset(oroph.data13.t, stage == "stage1")$shannon.oroph
+
+data1 <- cbind(shannon.change, subset(oroph.data13.t, stage == "stage1"))
+
+my_comparisons <- list(c("Negative", "Positive"))
+
+po.ng<- ggplot(data1, aes(x=h1n1_pre_group,  y=shannon.oroph), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_pre_group, fill=h1n1_pre_group), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_pre_group), fun.y=mean, geom="point") +
+    geom_jitter(aes(x=h1n1_pre_group,  color=h1n1_serostatus), width=0.2, height=0, size=2)  +
+    scale_fill_manual(values=c("black", "#bf5b17"))+
+    scale_color_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+  labs(title = "H1N1 backgroud")
+
+
+my_comparisons <- list(c("Con", "Rev"))
+data1$h1n1_serostatus <- factor(data1$h1n1_serostatus,levels=c("Rev", "Con"), ordered=TRUE)
+po.cr<- ggplot(data1, aes(x=h1n1_serostatus,  y=shannon.change), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_serostatus, fill=h1n1_serostatus), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_serostatus), fun.y=mean, geom="point") +
+    geom_jitter(aes(x=h1n1_serostatus,  color=h1n1_pre_group), width=0.2, height=0, size=2) +
+    scale_fill_manual(values=c("#386cb0", "#f0027f"))+
+    scale_color_manual(values=c("black", "#bf5b17"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+  labs(title = "TIV Response")
+
+my_comparisons <- list(c("stage1", "stage3"))
+oroph.data13.t<- subset(oroph.data13.t, Grade=="G_2018")
+po.13<- ggplot(oroph.data13.t, aes(x=stage,  y=shannon.oroph), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=stage), fun.y=mean, geom="point") +
+    geom_point(aes(x=stage, color=h1n1_serostatus), size=3, alpha=0.7) +
+    geom_line(aes(group = student_id, color=h1n1_serostatus ), size = 1.5, alpha=0.3)+
+    scale_fill_manual(values=c("#984ea3", "#1b9e77"))+
+    scale_color_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = TRUE, color="red") +
+    scale_x_discrete(breaks=c("stage1", "stage3"), labels=c("pre", "post"))+
+  labs(title = "TIV 2018")
+
+oroph.data45<- subset(oroph.data, stage %in% c("stage4", "stage5") & diff_H1N1 >= 0)
+oroph.data45.t<- subset(oroph.data45, student_id %in% as.character(intersect(subset(oroph.data45, stage=="stage4")$student_id, subset(oroph.data45, stage=="stage5")$student_id)))
+
+my_comparisons <- list(c("stage4", "stage5"))
+oroph.data45.t<- subset(oroph.data45.t, Grade=="G_2018")
+po.45<- ggplot(oroph.data45.t, aes(x=stage,  y=shannon.oroph), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=stage), fun.y=mean, geom="point") +
+    geom_point(aes(x=stage, color=h1n1_serostatus), size=3, alpha=0.7) +
+    geom_line(aes(group = student_id, color=h1n1_serostatus ), size = 1.5, alpha=0.3)+
+    scale_fill_manual(values=c("#8073ac", "#4d9221"))+
+    scale_color_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank(), axis.title.y =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = TRUE, color="red") +
+    scale_x_discrete(breaks=c("stage4", "stage5"), labels=c("pre", "post"))+
+  labs(title = "TIV 2019")
+
+
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan" & grade !="grade_19" & stage %in% c("stage1", "stage3", "stage4", "stage5"))
+physeq.fp<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+
+fp.sh <- plot_richness(physeq.fp, "stage", measures= "Shannon")
+shannon.fecal <- fp.sh$data$value
+
+titer2 <- titer[as.character(fp.sh$data$student_id),]
+fecal.data<- cbind(fp.sh$data[,c(3,5,6)], shannon.fecal, titer2)
+
+fecal.data13<- subset(fecal.data, stage %in% c("stage1", "stage3") & diff_H1N1 >= 0)
+fecal.data13.t<- subset(fecal.data13, student_id %in% as.character(intersect(subset(fecal.data13, stage=="stage1")$student_id, subset(fecal.data13, stage=="stage3")$student_id)))
+shannon.change <- subset(fecal.data13.t, stage == "stage3")$shannon.fecal - subset(fecal.data13.t, stage == "stage1")$shannon.fecal
+
+data1 <- cbind(shannon.change, subset(fecal.data13.t, stage == "stage1"))
+
+my_comparisons <- list(c("Negative", "Positive"))
+pf.ng<- ggplot(data1, aes(x=h1n1_pre_group,  y=shannon.fecal), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_pre_group, fill=h1n1_pre_group), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_pre_group), fun.y=mean, geom="point") +
+    geom_jitter(aes(x=h1n1_pre_group,  color=h1n1_serostatus), width=0.2, height=0, size=2)  +
+    scale_fill_manual(values=c("black", "#bf5b17"))+
+    scale_color_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5), panel.border= element_rect(color="blue"))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+  labs(title = "H1N1 backgroud")
+
+my_comparisons <- list(c("Con", "Rev"))
+data1$h1n1_serostatus <- factor(data1$h1n1_serostatus,levels=c("Rev", "Con"), ordered=TRUE)
+pf.cr<- ggplot(data1, aes(x=h1n1_serostatus,  y=shannon.change), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_serostatus, fill=h1n1_serostatus), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_serostatus), fun.y=mean, geom="point") +
+    geom_jitter(aes(x=h1n1_serostatus,  color=h1n1_pre_group), width=0.2, height=0, size=2) +
+    scale_fill_manual(values=c("#386cb0", "#f0027f"))+
+    scale_color_manual(values=c("black", "#bf5b17"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5), panel.border= element_rect(color="blue"))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+  labs(title = "TIV Response")
+
+
+my_comparisons <- list(c("stage1", "stage3"))
+
+fecal.data13.t<- subset(fecal.data13.t, Grade=="G_2018")
+pf.13<- ggplot(fecal.data13.t, aes(x=stage,  y=shannon.fecal), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=stage), fun.y=mean, geom="point") +
+    geom_point(aes(x=stage, color=h1n1_serostatus), size=3, alpha=0.7) +
+    geom_line(aes(group = student_id, color=h1n1_serostatus ), size = 1.5, alpha=0.3)+
+    scale_fill_manual(values=c("#984ea3", "#1b9e77"))+
+    scale_color_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5), panel.border= element_rect(color="blue"))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = TRUE, color="red") +
+    scale_x_discrete(breaks=c("stage1", "stage3"), labels=c("pre", "post"))+
+  labs(title = "TIV 2018")
+
+fecal.data45<- subset(fecal.data, stage %in% c("stage4", "stage5") & diff_H1N1 >= 0)
+fecal.data45.t<- subset(fecal.data45, student_id %in% as.character(intersect(subset(fecal.data45, stage=="stage4")$student_id, subset(fecal.data45, stage=="stage5")$student_id)))
+
+my_comparisons <- list(c("stage4", "stage5"))
+
+fecal.data45.t<- subset(fecal.data45.t, Grade=="G_2018")
+pf.45<- ggplot(fecal.data45.t, aes(x=stage,  y=shannon.fecal), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=stage), fun.y=mean, geom="point") +
+    geom_point(aes(x=stage, color=h1n1_serostatus), size=3, alpha=0.7) +
+    geom_line(aes(group = student_id, color=h1n1_serostatus ), size = 1.5, alpha=0.3)+
+    scale_fill_manual(values=c("#8073ac", "#4d9221"))+
+    scale_color_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5), panel.border= element_rect(color="blue"))+
+    theme(axis.title.x =element_blank(), axis.title.y =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = TRUE, color="red")+
+  scale_x_discrete(breaks=c("stage4", "stage5"), labels=c("pre", "post"))+
+  labs(title = "TIV 2019")
+
+(po.ng | po.cr | po.13 | po.45) / (pf.ng | pf.cr | pf.13 | pf.45) #fig036
+
+# po.ng：本底抗体阴性-阳性的呼吸道菌群多样性无显著差异
+# po.cr: 接种疫苗后转阳的人群咽部菌群多样性降低显著
+# po.13: 2018级学生初次接种TIV疫苗后咽部菌群多样性降低
+# po.45: 2018级学生初次接种TIV疫苗后咽部菌群多样性变化不大
+# pf.ng;pf.cr;pf.13;pf.45: 接种TIV疫苗对肠道菌群多样性影响不大
+
+
+```
+
+
+## 2 接种疫苗对肠道和咽部菌群离散度、物种组成的影响
+
+```{r}
+
+titer2<- read.csv("C:/Users/hui/Desktop/TIV16S2020.lihui/processing.data/meta_immune_data.csv",header = T, sep = ',')
+titer.neg <- subset(titer2, h1n1_pre_group == "Negative")
+student_id<- titer.neg$id
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan"&stage %in% c("stage1"))
+physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+physeq.f.neg1<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+div.neg1<- divergence(physeq.f.neg1, apply(abundances(physeq.f.neg1), 1, median), method = "bray")
+
+titer.pos <- subset(titer2, h1n1_pre_group == "Positive")
+student_id<- titer.pos$id
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan"&stage %in% c("stage1"))
+physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+physeq.f.pos1<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+div.pos1<- divergence(physeq.f.pos1, apply(abundances(physeq.f.pos1), 1, median), method = "bray")
+
+titer.neg <- subset(titer2, h1n1_serostatus== "Con")
+student_id<- titer.neg$id
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan"&stage %in% c("stage3"))
+physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+physeq.f.con3<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+div.con3<- divergence(physeq.f.con3, apply(abundances(physeq.f.con3), 1, median), method = "bray")
+
+titer.pos <- subset(titer2, h1n1_serostatus == "Rev")
+student_id<- titer.pos$id
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan"&stage %in% c("stage3"))
+physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+physeq.f.rev3<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+div.rev3<- divergence(physeq.f.rev3, apply(abundances(physeq.f.rev3), 1, median), method = "bray")
+
+divergence <- rbind(t(as.data.frame(div.neg1)), t(as.data.frame(div.con3)), t(as.data.frame(div.pos1)), t(as.data.frame(div.rev3)))
+
+rownames(oroph.data)<- oroph.data$samples
+data.div <- cbind(divergence, oroph.data[rownames(divergence),])
+
+my_comparisons <- list(c("Negative", "Positive"))
+od.ng<- ggplot(data.div, aes(x=h1n1_pre_group,  y=divergence), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_pre_group, fill=h1n1_pre_group), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_pre_group), fun.y=mean, geom="point") +
+    scale_fill_manual(values=c("black", "#bf5b17"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    labs(title = "Oroph", y="Divergence")
+
+my_comparisons <- list(c("Con", "Rev"))
+data.div$h1n1_serostatus <- factor(data.div$h1n1_serostatus,levels=c("Rev", "Con"), ordered=TRUE)
+od.cr<- ggplot(data.div, aes(x=h1n1_serostatus,  y=divergence), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_serostatus, fill=h1n1_serostatus), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_serostatus), fun.y=mean, geom="point") +
+    scale_fill_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank(), axis.title.y =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    labs(title = "TIV Response")
+
+titer2<- read.csv("C:/Users/hui/Desktop/TIV16S2020.lihui/processing.data/meta_immune_data.csv",header = T, sep = ',')
+titer.neg <- subset(titer2, h1n1_pre_group == "Negative")
+student_id<- titer.neg$id
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan"&stage %in% c("stage1"))
+physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+physeq.f.neg1<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+div.neg1<- divergence(physeq.f.neg1, apply(abundances(physeq.f.neg1), 1, median), method = "bray")
+
+titer.pos <- subset(titer2, h1n1_pre_group == "Positive")
+student_id<- titer.pos$id
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan"&stage %in% c("stage1"))
+physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+physeq.f.pos1<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+div.pos1<- divergence(physeq.f.pos1, apply(abundances(physeq.f.pos1), 1, median), method = "bray")
+
+titer.neg <- subset(titer2, h1n1_serostatus== "Con")
+student_id<- titer.neg$id
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan"&stage %in% c("stage3"))
+physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+physeq.f.con3<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+div.con3<- divergence(physeq.f.con3,  apply(abundances(physeq.f.con3), 1, median), method = "bray")
+
+titer.pos <- subset(titer2, h1n1_serostatus == "Rev")
+student_id<- titer.pos$id
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan"&stage %in% c("stage3"))
+physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+physeq.f.rev3<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+div.rev3<- divergence(physeq.f.rev3, apply(abundances(physeq.f.rev3), 1, median), method = "bray")
+
+
+divergence <- rbind(t(as.data.frame(div.neg1)), t(as.data.frame(div.con3)), t(as.data.frame(div.pos1)), t(as.data.frame(div.rev3)))
+rownames(fecal.data)<- fecal.data$samples
+data.div <- cbind(divergence, fecal.data[rownames(divergence),])
+
+my_comparisons <- list(c("Negative", "Positive"))
+fd.ng<- ggplot(data.div, aes(x=h1n1_pre_group,  y=divergence), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_pre_group, fill=h1n1_pre_group), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_pre_group), fun.y=mean, geom="point") +
+    scale_fill_manual(values=c("black", "#bf5b17"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5), panel.border= element_rect(color="blue"))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    labs(title = "Fecal", y="Divergence")
+
+my_comparisons <- list(c("Con", "Rev"))
+data.div$h1n1_serostatus <- factor(data.div$h1n1_serostatus,levels=c("Rev", "Con"), ordered=TRUE)
+fd.cr<- ggplot(data.div, aes(x=h1n1_serostatus,  y=divergence), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_serostatus, fill=h1n1_serostatus), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_serostatus), fun.y=mean, geom="point") +
+    scale_fill_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5), panel.border= element_rect(color="blue"))+
+    theme(axis.title.x =element_blank(), axis.title.y =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    labs(title = "TIV Response")
+
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan" & grade !="grade_19" & stage %in% c("stage1", "stage3", "stage4", "stage5"))
+physeq.fp<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+dis_bray.13<- phyloseq::distance(physeq.fp, "bray")
+
+dis_bray.1345 <- as.matrix(dis_bray.13)
+meta<- meta(physeq.fp)
+sub_meta13<- subset(meta, student_id %in% intersect(subset(meta, stage=="stage1")$student_id, subset(meta, stage=="stage3")$student_id))
+bray<- diag(dis_bray.1345[rownames(subset(sub_meta13, stage=="stage1")), rownames(subset(sub_meta13, stage=="stage3"))])
+data13<- cbind(bray, subset(sub_meta13, stage=="stage1"))
+
+sub_meta45<- subset(meta, student_id %in% intersect(subset(meta, stage=="stage4")$student_id, subset(meta, stage=="stage5")$student_id))
+bray<- diag(dis_bray.1345[rownames(subset(sub_meta45, stage=="stage4")), rownames(subset(sub_meta45, stage=="stage5"))])
+data45<- cbind(bray, subset(sub_meta45, stage=="stage4"))
+
+data1345 <- rbind(data13, data45)
+
+data.dis<- cbind(data1345[,c(1,4)], titer[data1345$student_id, ])
+
+
+data1<- subset(data.dis, stage=="stage1")
+data2<- subset(data1, h1n1_serostatus != "NA")
+my_comparisons <- list(c("Con", "Rev"))
+data2$h1n1_serostatus <- factor(data2$h1n1_serostatus,levels=c("Rev", "Con"), ordered=TRUE)
+po2.cr<- ggplot(data2, aes(x=h1n1_serostatus,  y=bray), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_serostatus, fill=h1n1_serostatus), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_serostatus), fun.y=mean, geom="point")+ 
+geom_jitter(aes(x=h1n1_serostatus,  color=h1n1_pre_group), width=0.2, height=0, size=2) +
+    scale_fill_manual(values=c("#386cb0", "#f0027f"))+
+    scale_color_manual(values=c("black", "#bf5b17"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    labs(title = "TIV Responce" ,y="Paired Bray-Curtis")
+
+my_comparisons <- list(c("stage1", "stage4"))
+data.dis<- subset(data.dis, Grade=="G_2018")
+po.14<- ggplot(data.dis, aes(x=stage,  y=bray), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=stage), fun.y=mean, geom="point") +
+    geom_jitter(aes(x=stage, color=h1n1_serostatus), width=0.2, height=0, size=2)+
+    scale_fill_manual(values=c("#8073ac", "#4d9221"))+
+    scale_color_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank(), axis.title.y =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    scale_x_discrete(breaks=c("stage1", "stage4"), labels=c("TIV-2018", "TIV-2019"))+
+    labs(title = "Vaccination year")
+
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan" & grade !="grade_19" & stage %in% c("stage1", "stage3", "stage4", "stage5"))
+physeq.fp<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+dis_bray.13<- phyloseq::distance(physeq.fp, "bray")
+
+dis_bray.1345 <- as.matrix(dis_bray.13)
+meta<- meta(physeq.fp)
+sub_meta13<- subset(meta, student_id %in% intersect(subset(meta, stage=="stage1")$student_id, subset(meta, stage=="stage3")$student_id))
+bray<- diag(dis_bray.1345[rownames(subset(sub_meta13, stage=="stage1")), rownames(subset(sub_meta13, stage=="stage3"))])
+data13<- cbind(bray, subset(sub_meta13, stage=="stage1"))
+
+sub_meta45<- subset(meta, student_id %in% intersect(subset(meta, stage=="stage4")$student_id, subset(meta, stage=="stage5")$student_id))
+bray<- diag(dis_bray.1345[rownames(subset(sub_meta45, stage=="stage4")), rownames(subset(sub_meta45, stage=="stage5"))])
+data45<- cbind(bray, subset(sub_meta45, stage=="stage4"))
+
+data1345 <- rbind(data13, data45)
+
+data.dis<- cbind(data1345[,c(1,4)], titer[data1345$student_id, ])
+
+data1<- subset(data.dis, stage=="stage1")
+data2<- subset(data1, h1n1_serostatus != "NA")
+my_comparisons <- list(c("Con", "Rev"))
+data2$h1n1_serostatus <- factor(data2$h1n1_serostatus,levels=c("Rev", "Con"), ordered=TRUE)
+pf2.cr<- ggplot(data2, aes(x=h1n1_serostatus,  y=bray), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_serostatus, fill=h1n1_serostatus), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=h1n1_serostatus), fun.y=mean, geom="point")+ 
+geom_jitter(aes(x=h1n1_serostatus,  color=h1n1_pre_group), width=0.2, height=0, size=2) +
+    scale_fill_manual(values=c("#386cb0", "#f0027f"))+
+    scale_color_manual(values=c("black", "#bf5b17"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border= element_rect(color="blue")) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    labs(title = "TIV Responce" ,y="Paired Bray-Curtis")
+
+my_comparisons <- list(c("stage1", "stage4"))
+
+data.dis<- subset(data.dis, Grade=="G_2018")
+pf.14<- ggplot(data.dis, aes(x=stage,  y=bray), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=stage), fun.y=mean, geom="point") +
+    geom_jitter(aes(x=stage, color=h1n1_serostatus), width=0.2, height=0, size=2)+
+    scale_fill_manual(values=c("#8073ac", "#4d9221"))+
+    scale_color_manual(values=c("#386cb0", "#f0027f"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5), panel.border= element_rect(color="blue"))+
+    theme(axis.title.x =element_blank(), axis.title.y =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    scale_x_discrete(breaks=c("stage1", "stage4"), labels=c("TIV-2018", "TIV-2019"))+
+    labs(title = "Vaccination year")
+
+(od.ng | od.cr | po2.cr | po.14) / (fd.ng | fd.cr | pf2.cr | pf.14) #fig037
+
+# od.ng;od.cr: TIV本底抗体水平和TIV差异应答对咽部菌群的人群离散影响不大
+# po2.cr;po.14: TIV差异应答对咽部菌群的影响结构变化（paired bray—curtis distance)不大,首次和再次接种无差异
+# od.ng;od.cr: 与本底阴性相比，TIV本底阳性的人群肠道菌群更加集中
+# od.ng;od.cr: 与未转阳相比，TIV转阳人群肠道菌群更加离散
+# po2.cr;po.14: TIV差异应答对咽部菌群的影响结构变化（paired bray—curtis distance)不大,首次和再次接种无差异
+```
+
+## 3 TIV滴度变化-肠道菌群变化-咽部菌群变化间的互作关系
+
+```{r,eval=FALSE}
+data.all <- read.csv("C:/Users/hui/Desktop/TIV16S2020.lihui/network/immune.microbiome.changedata.csv",header = T, sep = ',',row.names = 1)
+
+data.all1<- data.all[,c(1:28)]
+cor<- cor(data.all1, use="pairwise", method="spearman")
+res <- cor.mtest(cor, conf.level= .95, adjust = "fdr")
+cor[c(6:28),c(6:28)]=0
+cor[res$p >0.05 | abs(cor)<0.15] = 0
+cor1 <-  graph_from_adjacency_matrix(cor,
+                                     mode="undirected",
+                                     weighted=TRUE,
+                                     diag=FALSE )
+
+igraph.weight = E(cor1)$weight
+E(cor1)$weight = NA
+E(cor1)$width = recode(abs(igraph.weight ),"0.1:0.4=2; 0.4:0.5=4; 0.5:0.6=5; 0.6:0.7=6; 0.7:1.0=8")
+sum(igraph.weight>0)# number of postive correlation
+sum(igraph.weight<0)# number of negative correlation
+E.color = igraph.weight
+E.color = ifelse(E.color>0, "red",ifelse(E.color<0, "blue","grey"))
+V(cor1)$stage<- 3
+V(cor1)$size<- 3
+E(cor1)$time<- c("tiv") 
+E(cor1)$color = as.character(E.color)
+V(cor1)$type<- as.character(rep(c("A","B"),c(4,24)))
+# createNetworkFromIgraph(cor1,"cor.graph1")
+
+data.all1<- data.all[,c(5,29:117)]
+cor<- cor(data.all1, use="pairwise", method="spearman")
+res <- cor.mtest(cor, conf.level= .95, adjust = "fdr")
+cor[res$p >0.05 | abs(cor)<0.15] = 0
+cor[c(2:90),c(2:90)]=0
+cor1 <-  graph_from_adjacency_matrix(cor,
+                                     mode="undirected",
+                                     weighted=TRUE,
+                                     diag=FALSE )
+
+igraph.weight = E(cor1)$weight
+E(cor1)$weight = NA
+E(cor1)$width = recode(abs(igraph.weight ),"0.1:0.4=2; 0.4:0.5=4; 0.5:0.6=5; 0.6:0.7=6; 0.7:1.0=8")
+sum(igraph.weight>0)# number of postive correlation
+sum(igraph.weight<0)# number of negative correlation
+E.color = igraph.weight
+E.color = ifelse(E.color>0, "red",ifelse(E.color<0, "blue","grey"))
+E(cor1)$time<- c("tiv") 
+V(cor1)$stage<- 3
+V(cor1)$size<- 3
+E(cor1)$color = as.character(E.color)
+V(cor1)$type<- as.character(rep(c("B", "C", "D"),c(1,48,41)))
+# createNetworkFromIgraph(cor1,"cor.graph2")
+
+gos3.cor = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gos3/gos3_sparcc.txt', header = T, sep = '\t', row.names = 1)
+gos3.p = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gos3/pvals_two_sided.txt', header = T, sep = '\t', row.names = 1)
+gos3.lefse = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gos3/o.lefse.txt', header = T, sep = '\t', row.names = 1)
+o.lefse3<- gos3.lefse[rownames(gos3.cor),]
+gos3.cor1<- gos3.cor
+gos3.cor1[gos3.p>0.05|abs(gos3.cor1)<0.45] = 0
+gos3.cor1<- as.matrix(gos3.cor1)
+gos3 <-  graph_from_adjacency_matrix(gos3.cor1,
+                                     mode="undirected",
+                                     weighted=TRUE,
+                                     diag=FALSE )
+
+igraph.weight = E(gos3)$weight
+E(gos3)$weight = NA
+E(gos3)$width = recode(abs(igraph.weight ),"0.1:0.4=2; 0.4:0.5=4; 0.5:0.6=5; 0.6:0.7=6; 0.7:1.0=8")
+sum(igraph.weight>0)# number of postive correlation
+sum(igraph.weight<0)# number of negative correlation
+E.color = igraph.weight
+E.color = ifelse(E.color>0, "red",ifelse(E.color<0, "blue","grey"))
+E(gos3)$color = as.character(E.color)
+V(gos3)$type<- c("D")
+V(gos3)$size<- o.lefse3$LDA
+V(gos3)$stage<- o.lefse3$stage
+V(gos3)$p<- o.lefse3$p
+E(gos3)$time<- c("post") 
+# createNetworkFromIgraph(gos3,"gos3")
+
+gos1.cor = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gos1/gos1_sparcc.txt', header = T, sep = '\t', row.names = 1)
+gos1.p = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gos1/pvals_two_sided.txt', header = T, sep = '\t', row.names = 1)
+gos1.lefse = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gos1/o.lefse.txt', header = T, sep = '\t', row.names = 1)
+o.lefse1<- gos1.lefse[rownames(gos1.cor),]
+
+gos1.cor1<- gos1.cor
+gos1.cor1[gos1.p>0.05|abs(gos1.cor1)<0.45] = 0
+gos1.cor1<- as.matrix(gos1.cor1)
+gos1 <-  graph_from_adjacency_matrix(gos1.cor1,
+                                     mode="undirected",
+                                     weighted=TRUE,
+                                     diag=FALSE )
+
+igraph.weight = E(gos1)$weight
+E(gos1)$weight = NA
+E(gos1)$width = recode(abs(igraph.weight ),"0.1:0.4=2; 0.4:0.5=4; 0.5:0.6=5; 0.6:0.7=6; 0.7:1.0=8")
+sum(igraph.weight>0)# number of postive correlation
+sum(igraph.weight<0)# number of negative correlation
+E.color = igraph.weight
+E.color = ifelse(E.color>0, "red",ifelse(E.color<0, "blue","grey"))
+E(gos1)$color = as.character(E.color)
+V(gos1)$type<- c("D")
+V(gos1)$stage<- o.lefse1$stage
+V(gos1)$p<- o.lefse1$p
+V(gos1)$size<- o.lefse1$LDA
+E(gos1)$time<- c("pre")
+# createNetworkFromIgraph(gos1,"gos1")
+
+gfs3.cor = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gfs3/gfs3_sparcc.txt', header = T, sep = '\t', row.names = 1)
+gfs3.p = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gfs3/pvals_two_sided.txt', header = T, sep = '\t', row.names = 1)
+gfs3.lefse = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gfs3/f.lefse.txt', header = T, sep = '\t', row.names = 1)
+gfs3.cor1<- gfs3.cor
+gfs3.cor1[gfs3.p>0.05|abs(gfs3.cor1)<0.45] = 0
+gfs3.cor1<- as.matrix(gfs3.cor1)
+gfs3 <-  graph_from_adjacency_matrix(gfs3.cor1,
+                                     mode="undirected",
+                                     weighted=TRUE,
+                                     diag=FALSE )
+
+igraph.weight = E(gfs3)$weight
+E(gfs3)$weight = NA
+E(gfs3)$width = recode(abs(igraph.weight ),"0.1:0.4=2; 0.4:0.5=4; 0.5:0.6=5; 0.6:0.7=6; 0.7:1.0=8")
+sum(igraph.weight>0)# number of postive correlation
+sum(igraph.weight<0)# number of negative correlation
+E.color = igraph.weight
+E.color = ifelse(E.color>0, "red",ifelse(E.color<0, "blue","grey"))
+E(gfs3)$color = as.character(E.color)
+V(gfs3)$type<- c("C")
+f.lefse3 <- gfs3.lefse[rownames(gfs3.cor1),]
+V(gfs3)$stage<- f.lefse3$stage
+V(gfs3)$p<- f.lefse3$p
+V(gfs3)$size<- f.lefse3$LDA
+E(gfs3)$time<- c("post")
+# createNetworkFromIgraph(gfs3,"gfs3")
+
+gfs1.cor = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gfs1/gfs1_sparcc.txt', header = T, sep = '\t', row.names = 1)
+gfs1.p = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gfs1/pvals_two_sided.txt', header = T, sep = '\t', row.names = 1)
+gfs1.lefse = read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gfs1/f.lefse.txt', header = T, sep = '\t', row.names = 1)
+gfs1.cor1<- gfs1.cor
+gfs1.cor1[gfs1.p>0.05|abs(gfs1.cor1)<0.45] = 0
+gfs1.cor1<- as.matrix(gfs1.cor1)
+gfs1 <-  graph_from_adjacency_matrix(gfs1.cor1,
+                                     mode="undirected",
+                                     weighted=TRUE,
+                                     diag=FALSE )
+
+igraph.weight = E(gfs1)$weight
+E(gfs1)$weight = NA
+E(gfs1)$width = recode(abs(igraph.weight ),"0.1:0.4=2; 0.4:0.5=4; 0.5:0.6=5; 0.6:0.7=6; 0.7:1.0=8")
+sum(igraph.weight>0)# number of postive correlation
+sum(igraph.weight<0)# number of negative correlation
+E.color = igraph.weight
+E.color = ifelse(E.color>0, "red",ifelse(E.color<0, "blue","grey"))
+E(gfs1)$color = as.character(E.color)
+V(gfs1)$type<- c("C")
+f.lefse1 <- gfs3.lefse[rownames(gfs1.cor1),]
+V(gfs1)$stage<- f.lefse1$stage
+V(gfs1)$p<- f.lefse1$p
+V(gfs1)$size<- f.lefse1$LDA
+E(gfs1)$time<- c("pre")
+# createNetworkFromIgraph(gfs1,"gfs1")
+
+#保存为tiv.mic.imm.cys
+
+```
+   
+
+## 4 生态学方面的探索-接种疫苗前后肠道菌群物种丰度的人群分布
+
+```{r}
+library(grid)
+
+# 方法一：接种疫苗前后肠道菌群物种丰度的人群分布
+genus.o.np <- read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gos1/o.data.txt', header = T, sep = '\t', row.names = 1)
+genus.f.np <- read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/network/ResultsSparCC.gfs1/f.data.txt', header = T, sep = '\t', row.names = 1)
+f<-function(x) sum(x!=0)
+
+x<- apply(t(genus.f.np[,c(1:113)]),2,f)
+x<- x/ncol(genus.f.np[,c(1:113)])
+y<- rowMeans(genus.f.np[,c(1:113)])*100
+data.f1 <- as.data.frame(cbind(x,y))
+data.f1$type <- "fecal"
+data.f1$stage <- "Pre"
+
+x<- apply(t(genus.f.np[,c(114:226)]),2,f)
+x<- x/ncol(genus.f.np[,c(114:226)])
+y<- rowMeans(genus.f.np[,c(114:226)])*100
+data.f3 <- as.data.frame(cbind(x,y))
+data.f3$type <- "fecal"
+data.f3$stage <- "Post"
+
+x<- apply(t(genus.o.np[,c(1:117)]),2,f)
+x<- x/ncol(genus.o.np[,c(1:117)])
+y<- rowMeans(genus.o.np[,c(1:117)])*100
+data.o1 <- as.data.frame(cbind(x,y))
+data.o1$type <- "oroph"
+data.o1$stage <- "Pre"
+
+x<- apply(t(genus.o.np[,c(118:234)]),2,f)
+x<- x/ncol(genus.o.np[,c(118:234)])
+y<- rowMeans(genus.o.np[,c(118:234)])*100
+data.o3 <- as.data.frame(cbind(x,y))
+data.o3$type <- "oroph"
+data.o3$stage <- "Post"
+
+data.all <- rbind(data.f1, data.o1, data.f3, data.o3)
+data.all <- within(data.all, type <- factor(type, levels = c("oroph", "fecal")))
+data.all <- within(data.all, stage <- factor(stage, levels = c("Pre", "Post")))
+
+
+## 接种疫苗前后菌群的人群分布-丰度图
+p1<- ggplot(data.all, aes(x=x, y=y) ) + 
+    geom_bin2d(bins = 25) +
+    scale_y_continuous(trans = "log10")+
+    scale_fill_continuous(type = "viridis",breaks=seq(0, 60, by=20), trans = "log10") + 
+    theme_bw()+
+    facet_grid(type~stage)+
+    theme(strip.text = element_text(colour = 'black', face = 'bold', size = rel(1.2)), strip.background = element_rect(fill = 'white', colour = 'black', size = rel(2), linetype = 1))+
+    theme(axis.text.x = element_text(size=12,angle=-30,vjust = 0.1),axis.text.y = element_text(size=12), axis.title.x = element_text(size=16,angle=0),axis.title.y = element_text(size=16))+
+    labs(y = "Means of RA%", x = "Prevalence")
+
+p1 #fig038
+
+
+## 方法二：接种疫苗后人群咽部、肠道菌群检出的人群变化
+library(pheatmap)
+
+### 肠道
+genus.f.np<- read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/output.data/genus.f.np.txt', header = T, sep = '\t', row.names = 1)
+genus<- as.matrix(genus.f.np)
+
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y1 <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y1 [p, k] <- length(core_members(genus.f.np[,c(26:50)], detection = i[k], prevalence = j[p]))
+    }
+}
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y [p, k] <- length(core_members(genus.f.np[,c(1:25)], detection = i[k], prevalence = j[p]))
+    }
+}
+
+x<- y1-y
+bk <- c(seq(-10,-0.1,by=0.05),seq(0,10,by=0.05))
+
+rownames(x)<- j
+colnames(x)<- i
+setHook("grid.newpage", function() pushViewport(viewport(x=1,y=1,width=0.9, height=0.9, name="vp", just=c("right","top"))), action="prepend")
+pheatmap(x,
+         scale = "none",main = "Fecal microbiota changes during TIV2018",
+         color = c(colorRampPalette(colors = c("blue","white"))(length(bk)/2),colorRampPalette(colors = c("white","red"))(length(bk)/2)),
+         legend_breaks=seq(-10,10,2),
+         breaks=bk, cluster_rows = FALSE, cluster_cols = FALSE,
+         gaps_col = c(round(length(i)/3), round(length(i)*2/3)), gaps_row = c(round(length(j)/3), round(length(j)*2/3)))
+setHook("grid.newpage", NULL, "replace")
+grid.text("Medians of genus", y=-0.02, gp=gpar(fontsize=16))
+grid.text("Prevalence", x=-0.02, rot=90, gp=gpar(fontsize=16))
+
+#fig039  
+       
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y1 <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y1 [p, k] <- length(core_members(genus.f.np[,c(51:75)], detection = i[k], prevalence = j[p]))
+    }
+}
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y [p, k] <- length(core_members(genus.f.np[,c(26:50)], detection = i[k], prevalence = j[p]))
+    }
+}
+
+x<- y1-y
+
+bk <- c(seq(-10,-0.1,by=0.05),seq(0,10,by=0.05))
+
+rownames(x)<- j
+colnames(x)<- i
+setHook("grid.newpage", function() pushViewport(viewport(x=1,y=1,width=0.9, height=0.9, name="vp", just=c("right","top"))), action="prepend")
+pheatmap(x,
+         scale = "none",main = "Fecal microbiota changes during 2018-2019",
+         color = c(colorRampPalette(colors = c("blue","white"))(length(bk)/2),colorRampPalette(colors = c("white","red"))(length(bk)/2)),
+         legend_breaks=seq(-10,10,2),
+         breaks=bk, cluster_rows = FALSE, cluster_cols = FALSE,
+         gaps_col = c(round(length(i)/3), round(length(i)*2/3)), gaps_row = c(round(length(j)/3), round(length(j)*2/3)))
+setHook("grid.newpage", NULL, "replace")
+grid.text("Medians of genus", y=-0.02, gp=gpar(fontsize=16))
+grid.text("Prevalence", x=-0.02, rot=90, gp=gpar(fontsize=16))
+#fig040
+
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y1 <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y1 [p, k] <- length(core_members(genus.f.np[,c(76:100)], detection = i[k], prevalence = j[p]))
+    }
+}
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y [p, k] <- length(core_members(genus.f.np[,c(51:75)], detection = i[k], prevalence = j[p]))
+    }
+}
+
+x<- y1-y
+bk <- c(seq(-10,-0.1,by=0.05),seq(0,10,by=0.05))
+
+rownames(x)<- j
+colnames(x)<- i
+setHook("grid.newpage", function() pushViewport(viewport(x=1,y=1,width=0.9, height=0.9, name="vp", just=c("right","top"))), action="prepend")
+pheatmap(x,
+         scale = "none",main = "Fecal microbiota changes during TIV2019",
+         color = c(colorRampPalette(colors = c("blue","white"))(length(bk)/2),colorRampPalette(colors = c("white","red"))(length(bk)/2)),
+         legend_breaks=seq(-10,10,2),
+         breaks=bk, cluster_rows = FALSE, cluster_cols = FALSE,
+         gaps_col = c(round(length(i)/3), round(length(i)*2/3)), gaps_row = c(round(length(j)/3), round(length(j)*2/3)))
+setHook("grid.newpage", NULL, "replace")
+grid.text("Medians of genus", y=-0.02, gp=gpar(fontsize=16))
+grid.text("Prevalence", x=-0.02, rot=90, gp=gpar(fontsize=16))
+#fig041
+
+### 咽部
+genus.o.np<- read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/output.data/genus.o.np.txt', header = T, sep = '\t', row.names = 1)
+genus<- as.matrix(genus.o.np)
+
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y1 <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y1 [p, k] <- length(core_members(genus.o.np[,c(26:50)], detection = i[k], prevalence = j[p]))
+    }
+}
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y [p, k] <- length(core_members(genus.o.np[,c(1:25)], detection = i[k], prevalence = j[p]))
+    }
+}
+
+x<- y1-y
+bk <- c(seq(-10,-0.1,by=0.05),seq(0,10,by=0.05))
+
+rownames(x)<- j
+colnames(x)<- i
+setHook("grid.newpage", function() pushViewport(viewport(x=1,y=1,width=0.9, height=0.9, name="vp", just=c("right","top"))), action="prepend")
+pheatmap(x,
+         scale = "none",main = "Oroph microbiota changes during TIV2018",
+         color = c(colorRampPalette(colors = c("blue","white"))(length(bk)/2),colorRampPalette(colors = c("white","red"))(length(bk)/2)),
+         legend_breaks=seq(-10,10,2),
+         breaks=bk, cluster_rows = FALSE, cluster_cols = FALSE,
+         gaps_col = c(round(length(i)/3), round(length(i)*2/3)), gaps_row = c(round(length(j)/3), round(length(j)*2/3)))
+setHook("grid.newpage", NULL, "replace")
+grid.text("Medians of genus", y=-0.02, gp=gpar(fontsize=16))
+grid.text("Prevalence", x=-0.02, rot=90, gp=gpar(fontsize=16))
+#fig042
+        
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y1 <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y1 [p, k] <- length(core_members(genus.o.np[,c(51:75)], detection = i[k], prevalence = j[p]))
+    }
+}
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y [p, k] <- length(core_members(genus.o.np[,c(26:50)], detection = i[k], prevalence = j[p]))
+    }
+}
+
+x<- y1-y
+
+bk <- c(seq(-10,-0.1,by=0.05),seq(0,10,by=0.05))
+
+rownames(x)<- j
+colnames(x)<- i
+setHook("grid.newpage", function() pushViewport(viewport(x=1,y=1,width=0.9, height=0.9, name="vp", just=c("right","top"))), action="prepend")
+pheatmap(x,
+         scale = "none",main = "Oroph microbiota changes during 2018-2019",
+         color = c(colorRampPalette(colors = c("blue","white"))(length(bk)/2),colorRampPalette(colors = c("white","red"))(length(bk)/2)),
+         legend_breaks=seq(-10,10,2),
+         breaks=bk, cluster_rows = FALSE, cluster_cols = FALSE,
+         gaps_col = c(round(length(i)/3), round(length(i)*2/3)), gaps_row = c(round(length(j)/3), round(length(j)*2/3)))
+setHook("grid.newpage", NULL, "replace")
+grid.text("Medians of genus", y=-0.02, gp=gpar(fontsize=16))
+grid.text("Prevalence", x=-0.02, rot=90, gp=gpar(fontsize=16))
+#fig043
+
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y1 <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y1 [p, k] <- length(core_members(genus.o.np[,c(76:100)], detection = i[k], prevalence = j[p]))
+    }
+}
+i <- sort(unique(matrixStats::rowMedians(genus))); j <- seq(0.02,by=0.03,length.out=32);  # i and j
+ni<- length(i); nj <- length(j)  # lengths of i and j
+y <- matrix(NA, nj, ni) 
+for (k in 1:ni){
+    for (p in 1:nj){
+        y [p, k] <- length(core_members(genus.o.np[,c(51:75)], detection = i[k], prevalence = j[p]))
+    }
+}
+
+x<- y1-y
+bk <- c(seq(-10,-0.1,by=0.05),seq(0,10,by=0.05))
+
+rownames(x)<- j
+colnames(x)<- i
+setHook("grid.newpage", function() pushViewport(viewport(x=1,y=1,width=0.9, height=0.9, name="vp", just=c("right","top"))), action="prepend")
+pheatmap(x,
+         scale = "none",main = "Oroph microbiota changes during TIV2019",
+         color = c(colorRampPalette(colors = c("blue","white"))(length(bk)/2),colorRampPalette(colors = c("white","red"))(length(bk)/2)),
+         legend_breaks=seq(-10,10,2),
+         breaks=bk, cluster_rows = FALSE, cluster_cols = FALSE,
+         gaps_col = c(round(length(i)/3), round(length(i)*2/3)), gaps_row = c(round(length(j)/3), round(length(j)*2/3)))
+setHook("grid.newpage", NULL, "replace")
+grid.text("Medians of genus", y=-0.02, gp=gpar(fontsize=16))
+grid.text("Prevalence", x=-0.02, rot=90, gp=gpar(fontsize=16))
+#fig044
+
+```
+
+## 5 接种疫苗导致的群体肠道(咽部)菌变化型
+
+```{r}
+library(qvalue)
+
+#肠道
+a<-genus.f.np
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:25]),as.numeric(a[i,26:50]))
+        Pvalue[i]<-y$p.value
+        mean[i]<-mean(as.numeric(a[i,1:25]))-mean(as.numeric(a[i,26:50])) 
+    }
+# 对p value进行FDR校正
+qvalue<- qvalue(Pvalue)$qvalue
+# 在原文件后面加入log2FC，p value和FDR,共3列；
+genus.f13<-cbind(mean,Pvalue, qvalue)
+genus.f13<- as.data.frame(genus.f13)
+genus.f13$group<- "stage13"
+genus.f13$genus<- rownames(a)
+
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,51:75]),as.numeric(a[i,1:25]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,51:75]))-mean(as.numeric(a[i,1:25])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f14<-cbind(mean, Pvalue, qvalue)
+genus.f14<- as.data.frame(genus.f14)
+genus.f14$group<- "stage14"
+genus.f14$genus<- rownames(a)
+
+
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,26:50], as.numeric(a[i,51:75])))
+    Pvalue[i]<-y$p.value
+    mean[i]<- mean(as.numeric(a[i,26:50]))- mean(as.numeric(a[i,51:75]))
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f34<-cbind(mean,Pvalue, qvalue)
+genus.f34<- as.data.frame(genus.f34)
+genus.f34$group<- "stage34"
+genus.f34$genus<- rownames(a)
+
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,51:75]),as.numeric(a[i,76:100]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,51:75]))-mean(as.numeric(a[i,76:100])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f45<-cbind(mean, Pvalue, qvalue)
+genus.f45<- as.data.frame(genus.f45)
+genus.f45$group<- "stage45"
+genus.f45$genus<- rownames(a)
+
+genus.f<- rbind(genus.f13, genus.f34, genus.f45)
+data.f.up<- subset(genus.f, genus.f$qvalue <= 0.05 & mean <=0)
+data.f.down<- subset(genus.f, genus.f$qvalue <= 0.05 & mean >=0)
+table(data.f.up$group)
+table(data.f.down$group)
+
+data.f <- data.frame(time=letters[1:6], count=c(19, -1, 48, -76, 13, -5))
+p.f<- ggplot(data.f,aes(time,count)) + 
+    geom_bar(aes(fill=time),stat="identity")+
+    geom_text(aes(label=count), position=position_stack(vjust=0.5))+
+    theme_bw()+
+    theme(axis.title.x =element_blank())+ #设置x.y标题上文本的名称
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ # 不显示图例的标题
+    theme(legend.position='none')+
+    scale_x_discrete(breaks=c("a", "b", "c", "d", "e", "f"), labels=c("pre2018 vs post2018", "", "post2018 vs pre2019", "", "pre2019 vs post2019",""))+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons, paired = TRUE, color="red")+
+    theme(axis.text.x = element_text(angle = 30, vjust = 0.5))+
+    labs(y="Count of Fecal")
+    
+# 咽部
+a<-genus.o.np
+library(qvalue)
+
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:25]),as.numeric(a[i,26:50]))
+        Pvalue[i]<-y$p.value
+        mean[i]<-mean(as.numeric(a[i,1:25]))-mean(as.numeric(a[i,26:50])) 
+    }
+qvalue<- qvalue(Pvalue)$qvalue
+genus.o13<-cbind(mean,Pvalue, qvalue)
+genus.o13<- as.data.frame(genus.o13)
+genus.o13$group<- "stage13"
+genus.o13$genus<- rownames(a)
+
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,51:75]),as.numeric(a[i,1:25]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,51:75]))-mean(as.numeric(a[i,1:25])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.o14<-cbind(mean, Pvalue, qvalue)
+genus.o14<- as.data.frame(genus.o14)
+genus.o14$group<- "stage14"
+genus.o14$genus<- rownames(a)
+
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,26:50], as.numeric(a[i,51:75])))
+    Pvalue[i]<-y$p.value
+    mean[i]<- mean(as.numeric(a[i,26:50]))- mean(as.numeric(a[i,51:75]))
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.o34<-cbind(mean,Pvalue, qvalue)
+genus.o34<- as.data.frame(genus.o34)
+genus.o34$group<- "stage34"
+genus.o34$genus<- rownames(a)
+
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,51:75]),as.numeric(a[i,76:100]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,51:75]))-mean(as.numeric(a[i,76:100])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.o45<-cbind(mean, Pvalue, qvalue)
+genus.o45<- as.data.frame(genus.o45)
+genus.o45$group<- "stage45"
+genus.o45$genus<- rownames(a)
+
+genus.o<- rbind(genus.o13, genus.o34, genus.o45)
+data.o.up<- subset(genus.o, genus.o$qvalue <= 0.05 & mean <=0)
+data.o.down<- subset(genus.o, genus.o$qvalue <= 0.05 & mean >=0)
+table(data.o.up$group)
+table(data.o.down$group)
+
+data.o <- data.frame(time=letters[1:6], count=c(1, -11, 35, -22, 3, -5))
+p.o<- ggplot(data.o,aes(time,count)) + 
+    geom_bar(aes(fill=time),stat="identity")+
+    geom_text(aes(label=count), position=position_stack(vjust=0.5))+
+    theme_bw()+
+    theme(axis.title.x =element_blank())+ #设置x.y标题上文本的名称
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ # 不显示图例的标题
+    theme(legend.position='none')+
+    scale_x_discrete(breaks=c("a", "b", "c", "d", "e", "f"), labels=c("pre2018 vs post2018", "", "post2018 vs pre2019", "", "pre2019 vs post2019",""))+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons, paired = TRUE, color="red")+
+    theme(axis.text.x = element_text(angle = 30, vjust = 0.5))+
+    labs(y="Count of Oroph")
+
+# 抗干扰型：始终不发生变化
+genus.f.stable<- subset(as.data.frame(table(subset(genus.f, genus.f$qvalue >= 0.05 )$genus)), Freq == "3") ## 肠道
+
+genus.o.stable<- subset(as.data.frame(table(subset(genus.o, genus.o$qvalue >= 0.05 )$genus)), Freq == "3") ## 咽部
+
+# 恢复型：短暂变化后回复至初始水平
+genus.f134<- subset(rbind(genus.f13, genus.f34, genus.f14), rbind(genus.f13, genus.f34, genus.f14)$qvalue <= 0.05)
+genus.f134_13<- subset(genus.f134, group == "stage13")
+genus.f134_14<- subset(genus.f134, group == "stage14")
+rownames(genus.f134_13)<- genus.f134_13$genus
+genus.f.recover<- genus.f134_13[-which(rownames(genus.f134_13) %in% intersect(genus.f134_13$genus, genus.f134_14$genus)), ] ## 肠道
+
+genus.o134<- subset(rbind(genus.o13, genus.o34, genus.o14), rbind(genus.o13, genus.o34, genus.o14)$qvalue <= 0.05)
+genus.o134_13<- subset(genus.o134, group == "stage13")
+genus.o134_14<- subset(genus.o134, group == "stage14")
+rownames(genus.o134_13)<- genus.o134_13$genus
+genus.o.recover<- genus.o134_13[-which(rownames(genus.o134_13) %in% intersect(genus.o134_13$genus, genus.o134_14$genus)), ] ## 咽部
+
+#永久变化型：发生变化后未回复至初始水平
+genus.f.unrecover<- genus.f134_13[which(rownames(genus.f134_13) %in% intersect(genus.f134_13$genus, genus.f134_14$genus)), ] ## 肠道
+
+genus.o.unrecover<- genus.o134_13[which(rownames(genus.o134_13) %in% intersect(genus.o134_13$genus, genus.o134_14$genus)), ] ## 咽部
+
+data.BDT <- data.frame(type=letters[1:6], count=c(44, 46, 15, 4, 5, 8))
+p.BDT <- ggplot(data.BDT,aes(type,count)) + 
+    geom_bar(aes(fill=type),stat="identity")+
+    geom_text(aes(label=count), position=position_stack(vjust=0.5))+
+    scale_fill_manual(values=c('#8c510a','#01665e','#bf812d','#35978f','#dfc27d','#80cdc1'))+
+    theme_bw()+
+    theme(axis.title.x =element_blank())+ #设置x.y标题上文本的名称
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ # 不显示图例的标题
+    theme(legend.position='none')+
+    scale_x_discrete(breaks=c("a", "b", "c", "d", "e", "f"), labels=c("Stable in gut", "Stable in oral", "Recover in gut", "Recover in oral", "Unrecover in gut","Unrecover in oral"))+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons, paired = TRUE, color="red")+
+    theme(axis.text.x = element_text(angle = 30, vjust = 0.5))+
+    labs(y="Count")
+
+p.f | p.o | p.BDT  #fig045
+    
+```
+
+
+## 6 接种疫苗后肠道-咽部配对距离降低(unweighted UniFrac distances)
+
+```{r}
+
+load('C:/Users/hui/Desktop/TIV16S2020.lihui/processing.data/physeq.tiv16sall.Rdata')
+physeq<- physeq.tiv16sall
+titer2<- read.csv("C:/Users/hui/Desktop/TIV16S2020.lihui/processing.data/meta_immune_data.csv",header = T, sep = ',')
+titer2018 <- subset(titer2, Grade %in% c("G_2018") & h1n1_mix_group == "NP")
+
+  student_id<- titer2018$id
+  physeq.tib<- subset_samples(physeq, type %in% c("fecal", "oroph") & national=="tibetan" & grade == "grade_18" & stage %in% c("stage1", "stage3", "stage4", "stage5"))
+    physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+  sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+  sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+  physeq.fo<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+
+unifrac.fo<- phyloseq::distance(physeq.fo, "unifrac")
+dis.fo<- as.matrix(unifrac.fo)
+
+dis.fo1<- diag(dis.fo[c(1:25), c(101:125)])
+dis.fo3<- diag(dis.fo[c(26:50), c(126:150)])
+dis.fo4<- diag(dis.fo[c(51:75), c(151:175)])
+dis.fo5<- diag(dis.fo[c(76:100), c(176:200)])
+data.dis.fo<- cbind(dis.fo1, dis.fo3, dis.fo4, dis.fo5)
+shape.data.dis.fo <- melt(data.dis.fo)
+
+my_comparisons<- list(c("dis.fo1", "dis.fo3"), c("dis.fo3", "dis.fo4"), c("dis.fo4", "dis.fo5"))
+col <- c( "#4E5C68","#F8766D", "black", "#F52324")
+p.po<- ggplot(data=shape.data.dis.fo, aes(x=Var2, y=value, fill =Var2))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2, color="blue", size=2)+
+    scale_fill_manual(values=col)+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ # 不显示图例的标题
+    theme(legend.position='none')+
+    scale_x_discrete(breaks=c("dis.fo1", "dis.fo3", "dis.fo4", "dis.fo5"), labels=c("pre-2018", "post-2018", "pre-2019", "post-2019"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons, paired = TRUE, color="red")+
+    labs(y="unweighted UniFrac distances") 
+
+p.po # fig046
+```
+
+## 7 接种疫苗后在咽部可以发现更高比例的肠道物种
+
+```{r}
+library(FEAST)
+
+otu.feast<- t(physeq.fo@otu_table@.Data)
+meta.feast<- meta(physeq.fo)
+meta.feast$SampleID<- rownames(meta.feast)
+meta.fo<- meta.feast[, c("SampleID", "student_id", "type", "type")]
+colnames(meta.fo)<- c("SampleID", "Env", "SourceSink", "id")
+meta.fo$SourceSink <- as.character(meta.fo$SourceSink)
+meta.fo$id <- as.character(meta.fo$id)
+meta.fo$SourceSink[meta.fo$SourceSink == "oroph"] <- "Source"
+meta.fo$SourceSink[meta.fo$SourceSink == "fecal"] <- "Sink"
+meta.fo$id[meta.fo$id == "oroph"] <- "2"
+meta.fo$id[meta.fo$id == "fecal"] <- "1"
+
+for (i in 1:100){
+        metadata<- meta.fo[c(meta.fo$SampleID[i], meta.fo$SampleID[i+100]), ]
+        FEAST_output <- FEAST(C = otu.feast, metadata = metadata, different_sources_flag = 0, dir_path = "C:/Users/hui/Desktop/TIV16S2020.lihui/output.data/FEAST/", outfile=meta.fo$SampleID[i])
+    }
+    
+# type  *.txt  >> all.txt 
+# 合并文件生成sourcesink.csv
+
+sourcesink<- read.csv("C:/Users/hui/Desktop/TIV16S2020.lihui/output.data/FEAST1/sourcesink.csv",header = T, sep = ',')
+data.ss<- subset(sourcesink, type=="fecal")
+
+my_comparisons<- list(c("stage1", "stage3"), c("stage3", "stage4"), c("stage4", "stage5"))
+col <- c( "#4E5C68","#F8766D", "black", "#F52324")
+p.o2f<- ggplot(data=data.ss, aes(x=group, y=source, fill =group))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2, color="blue", size=2)+
+    scale_fill_manual(values=col)+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ # 不显示图例的标题
+    theme(legend.position='none')+
+    scale_x_discrete(breaks=c("stage1", "stage3", "stage4", "stage5"), labels=c("pre-2018", "post-2018", "pre-2019", "post-2019"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    labs(y="Proportion from oroph to fecal")
+
+data.ss<- subset(sourcesink, type=="oroph")
+
+p.f2o<-ggplot(data=data.ss, aes(x=group, y=source, fill =group))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2, color="blue", size=2)+
+    scale_fill_manual(values=col)+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ # 不显示图例的标题
+    theme(legend.position='none')+
+    scale_x_discrete(breaks=c("stage1", "stage3", "stage4", "stage5"), labels=c("pre-2018", "post-2018", "pre-2019", "post-2019"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")+
+    labs(y="Proportion from fecal to oroph")
+
+p.o2f #fig047
+p.f2o #fig048
+```
+
+## 8 接种疫苗导致肠道-咽部物种相互转移
+
+```{r}
+load('C:/Users/hui/Desktop/TIV16S2020.lihui/processing.data/physeq.tiv16sall.Rdata')
+physeq<- physeq.tiv16sall
+titer2<- read.csv("C:/Users/hui/Desktop/TIV16S2020.lihui/processing.data/meta_immune_data.csv",header = T, sep = ',')
+titer2018 <- subset(titer2, Grade %in% c("G_2018") & h1n1_mix_group == "NP")
+
+  student_id<- titer2018$id
+  physeq.tib<- subset_samples(physeq, type %in% c("fecal", "oroph") & national=="tibetan" & grade == "grade_18" & stage %in% c("stage1", "stage3", "stage4", "stage5"))
+    physeq.tib.p<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+  sample_data(physeq.tib.p)$human <- get_variable(physeq.tib.p, "student_id") %in% student_id
+  sub_physeq.tib.p<- subset_samples(physeq.tib.p, human=="TRUE")
+  physeq.fo<-  prune_taxa(taxa_sums(sub_physeq.tib.p) > 0, sub_physeq.tib.p)
+otu.fo<- physeq.fo@otu_table@.Data
+
+data.f<- as.data.frame(cbind(rowSums(otu.fo[, 1:25]) == 0, rowSums(otu.fo[, 26:50]) >= 2,  rowSums(otu.fo[, 51:75]) == 0, rowSums(otu.fo[, 76:100]) >= 2, rowSums(otu.fo[, 101:125]) != 0))
+names.f <- subset(data.f, V1 == "TRUE" & V2 == "TRUE" & V3 == "TRUE" & V4 == "TRUE" & V5 == "TRUE")
+tax.f<- physeq.fo@tax_table@.Data[rownames(names.f),]
+
+data.o<- as.data.frame(cbind(rowSums(otu.fo[, 101:125]) == 0, rowSums(otu.fo[, 126:150]) >= 2,  rowSums(otu.fo[, 151:175]) == 0, rowSums(otu.fo[, 176:200]) >= 2, rowSums(otu.fo[, 1:25]) != 0))
+names.o <- subset(data.o, V1 == "TRUE" & V2 == "TRUE" & V3 == "TRUE" & V4 == "TRUE" & V5 == "TRUE")
+tax.o<- physeq.fo@tax_table@.Data[rownames(names.o),]
+
+```
+
+## 9 接种疫苗后肠道和咽部的共有OTU变化
+
+```{r}
+otu.fo<-physeq.fo@otu_table@.Data
+
+inter.fo1<- length(intersect(rownames(otu.fo[, c(1:25)][which(rowSums(otu.fo[, c(1:25)])>0),]), rownames(otu.fo[, c(101:125)][which(rowSums(otu.fo[, c(101:125)])>0),])))
+inter.fo3<- length(intersect(rownames(otu.fo[, c(26:50)][which(rowSums(otu.fo[, c(26:50)])>0),]), rownames(otu.fo[, c(126:150)][which(rowSums(otu.fo[, c(126:150)])>0),])))
+inter.fo4<- length(intersect(rownames(otu.fo[, c(51:75)][which(rowSums(otu.fo[, c(51:75)])>0),]), rownames(otu.fo[, c(151:175)][which(rowSums(otu.fo[, c(151:175)])>0),])))
+inter.fo5<- length(intersect(rownames(otu.fo[, c(76:100)][which(rowSums(otu.fo[, c(76:100)])>0),]), rownames(otu.fo[, c(176:200)][which(rowSums(otu.fo[, c(176:200)])>0),])))
+
+ library(grid)
+ library(futile.logger)
+ library(VennDiagram)
+
+p.venn.fo1<- draw.pairwise.venn(
+  area1 = length(rownames(otu.fo[, c(1:25)][which(rowSums(otu.fo[, c(1:25)])>0),])),  #区域1的数
+  area2 = length(rownames(otu.fo[, c(101:125)][which(rowSums(otu.fo[, c(101:125)])>0),])),   #区域2的数
+  cross.area =length(intersect(rownames(otu.fo[, c(1:25)][which(rowSums(otu.fo[, c(1:25)])>0),]), rownames(otu.fo[, c(101:125)][which(rowSums(otu.fo[, c(101:125)])>0),]))),  #交叉数
+  category = c("Fecal-pre", "Oroph-pre"),#分类名称
+  fill = c("blue", "red"),#区域填充颜色
+  lty = "blank",  #区域边框线类型
+  cex = 2,        #区域内部数字的字体大小
+  cat.cex = 2,    #分类名称字体大小
+  cat.pos = c(285, 105), #分类名称在圆的位置，默认正上方，通过角度进行调整
+  cat.dist = 0.09,   #分类名称距离边的距离（可以为负数）
+  cat.just = list(c(-1, -1), c(1, 1)),  #分类名称的位置
+  ext.pos = 30,  #线的角度 默认是正上方12点位置
+  ext.dist = -0.05,   #外部线的距离
+  ext.length = 0.85,  #外部线长度
+  ext.line.lwd = 2,  #外部线的宽度
+  ext.line.lty = "dashed"   #外部线为虚线
+)
+grid.draw(p.venn.fo1) #fig049
+
+```
+
+
+```{r}
+p.venn.fo2<- draw.pairwise.venn(
+    area1 = length(rownames(otu.fo[, c(26:50)][which(rowSums(otu.fo[, c(26:50)])>0),])),  #区域1的数
+    area2 = length(rownames(otu.fo[, c(126:150)][which(rowSums(otu.fo[, c(126:150)])>0),])),   #区域2的数
+    cross.area = length(intersect(rownames(otu.fo[, c(26:50)][which(rowSums(otu.fo[, c(26:50)])>0),]), rownames(otu.fo[, c(126:150)][which(rowSums(otu.fo[, c(126:150)])>0),]))),  #交叉数
+    category = c("Fecal-post", "Oroph-post"),#分类名称
+    fill = c("blue", "red"),#区域填充颜色
+    lty = "blank",  #区域边框线类型
+    cex = 2,        #区域内部数字的字体大小
+    cat.cex = 2,    #分类名称字体大小
+    cat.pos = c(285, 105), #分类名称在圆的位置，默认正上方，通过角度进行调整
+    cat.dist = 0.09,   #分类名称距离边的距离（可以为负数）
+    cat.just = list(c(-1, -1), c(1, 1)),  #分类名称的位置
+    ext.pos = 30,  #线的角度 默认是正上方12点位置
+    ext.dist = -0.05,   #外部线的距离
+    ext.length = 0.85,  #外部线长度
+    ext.line.lwd = 2,  #外部线的宽度
+    ext.line.lty = "dashed"   #外部线为虚线
+)
+grid.draw(p.venn.fo2) #fig050
+```
+
+# 补充
+
+## 1. 创建phyloseq对象
+
+```{r,eval=FALSE}
+library(vegan)
+library(picante)
+library(phyloseq)
+library(plyr)
+
+ 
+otu <- read.delim('C:/Users/hui/Desktop/TIV16S2020.lihui/raw.data/feature-table.all.txt', row.names = 1, sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+otumat1<- t(otu)
+otumat2 <- Rarefy(otumat1, 10000)
+otumat<- t(otumat2[["otu.tab.rff"]])
+
+metadata<- read.csv('C:/Users/hui/Desktop/TIV16S2020.lihui/raw.data/metadata_all.csv',header = T, sep = ',',row.names = 1)
+sub_metadata<- metadata[colnames(otumat),]
+
+taxmat<- read.table('C:/Users/hui/Desktop/TIV16S2020.lihui/raw.data/tax.all.txt', header = T, sep = '\t', row.names = 1)
+taxmat<- as.matrix(taxmat)
+
+tree<- read.tree('C:/Users/hui/Desktop/TIV16S2020.lihui/raw.data/tree.nwk')
+
+OTU = otu_table(otumat, taxa_are_rows = TRUE)
+TAX = tax_table(taxmat)
+sampledata<- sample_data(sub_metadata)
+
+physeq0 = merge_phyloseq(OTU, TAX)
+physeq = merge_phyloseq(physeq0, sampledata, tree)
+physeq2 = merge_phyloseq(OTU, TAX, sampledata, tree)
+identical(physeq, physeq2)
+save(physeq,file = 'C:/Users/hui/Desktop/TIV16S2020.lihui/processing.data/physeq.tiv16sall.Rdata')
+```

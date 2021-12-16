@@ -1,0 +1,637 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+#Community types
+library(vegan)
+library(picante)
+library(phyloseq)
+library(ggplot2)
+library(GUniFrac)
+library(plyr)
+library(ggpubr)
+library(microbiome)
+library(patchwork)
+library(nlme)
+library(DirichletMultinomial)
+library(reshape2)
+library(ggalluvial)
+library(dplyr)
+
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18"))
+meta <- meta(physeq.tib18o)
+genus.18o <- genus[, rownames(meta)]
+
+pseq.comp <- genus.18o
+gp<- pseq.comp[which(rowSums(pseq.comp) > 0.001),]
+
+gp2<- apply(gp,2,as.numeric)
+rownames(gp2)<- rownames(gp)
+count <- as.matrix(t(gp2*10000))
+set.seed(010)
+fit <- mclapply(1:5, dmn, count = count, verbose=TRUE)
+lplc <- sapply(fit, laplace) # AIC / BIC / Laplace
+aic  <- sapply(fit, AIC) # AIC / BIC / Laplace
+bic  <- sapply(fit, BIC) # AIC / BIC / Laplace
+#plot(lplc, type="b", xlab="Number of Dirichlet Components", ylab="Model Fit")
+#lines(aic, type="b", lty = 2)
+#lines(bic, type="b", lty = 3)
+best <- fit[[which.min(lplc)]]
+mixturewt(best)
+ass <- apply(mixture(best), 1, which.max)
+
+for (k in seq(ncol(fitted(best)))) {
+    d <- melt(fitted(best))
+    colnames(d) <- c("OTU", "cluster", "value")
+    d <- subset(d, cluster == k) %>%
+        # Arrange OTUs by assignment strength
+        arrange(value) %>%
+        mutate(OTU = factor(OTU, levels = unique(OTU))) %>%
+        # Only show the most important drivers
+        filter(abs(value) > quantile(abs(value), 0.9))
+
+    p <- ggplot(d, aes(x = OTU, y = value)) +
+        geom_bar(stat = "identity") +
+        coord_flip() +
+        labs(title = paste("Top drivers: community type", k))
+    print(p)
+}
+
+
+rp<- cbind(t(gp), meta)
+rp$ass<- ass
+##plot community
+meta$ass <- ass
+meta$Type <-as.factor(meta$ass)
+col3<- c("#1A2937", "#E46C78","#58588A")
+p.c1<- ggplot(meta, aes(x = stage, stratum =Type, alluvium = student_id, fill = Type, label = Type)) +
+    theme_bw()+
+    scale_fill_manual(values = col3)+
+    geom_flow(stat ="alluvium", lode.guidance = "frontback",color ="darkgray") +
+    geom_stratum()
+p.c1 # fig031
+
+d1 <- subset(d, cluster == 1) %>%
+    # Arrange OTUs by assignment strength
+    arrange(value) %>%
+    mutate(OTU = factor(OTU, levels = unique(OTU))) %>%
+    # Only show the most important drivers
+    filter(abs(value) > quantile(abs(value), 0.97))
+
+d2 <- subset(d, cluster == 2) %>%
+    # Arrange OTUs by assignment strength
+    arrange(value) %>%
+    mutate(OTU = factor(OTU, levels = unique(OTU))) %>%
+    # Only show the most important drivers
+    filter(abs(value) > quantile(abs(value), 0.97))
+
+d3 <- subset(d, cluster == 3) %>%
+    # Arrange OTUs by assignment strength
+    arrange(value) %>%
+    mutate(OTU = factor(OTU, levels = unique(OTU))) %>%
+    # Only show the most important drivers
+    filter(abs(value) > quantile(abs(value), 0.97))
+names <- unique(c(as.character(d1$OTU), as.character(d2$OTU), as.character(d3$OTU)))
+
+gp2.test<- cbind(meta, t(gp[c("g_Prevotella", "g_Streptococcus", "g_Gemella", "g_Neisseria"),]))
+gp2.test$ass[gp2.test$ass == 1 ]  = "Type 1"
+gp2.test$ass[gp2.test$ass == 2 ]  = "Type 2"
+gp2.test$ass[gp2.test$ass == 3 ]  = "Type 3"
+gp2.test$Types <- gp2.test$ass
+gp2.test1 <- gp2.test[, c(3,5, 8:12)]
+test1 <- melt(gp2.test1)
+
+palette <- c('#2879C2','#EF5052','#6D3D1E','#7FC06C')
+ggplot(test1, aes(x=Types, y=value), shape=8 ) +
+    geom_boxplot(aes(x=Types, y=value, fill=variable), notch=FALSE) +
+    scale_fill_manual(values=palette)+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position = c(0.8, 0.85), legend.text = element_text(size = 12))+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y="Relative Abundance", x="")
+
+p.c2<- ggplot(data=test1, aes(x = stage, y = value, group=variable, color=variable)) +
+    geom_smooth(aes(group = variable,color=variable), method = 'loess', size = 1.5)+
+    scale_color_manual(values=palette) +
+    stat_summary()+
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y = "Relative Abundance (log10)", x = "")
+
+p.c2 
+
+genus1 <- genus.18o[core_members(genus.18o, detection = 0.0001, prevalence = 3/44),]
+genus2<- genus1[-c(11, 19, 30, 78:80),]
+
+tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18") & student_id != "FV1810")
+meta1 <- meta(tib18o)
+
+stage12 <- subset(meta1, stage %in% c("stage1", "stage2"))
+a<- genus2[, rownames(stage12)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f12<-cbind(mean, Pvalue, qvalue)
+genus.f12<- as.data.frame(genus.f12)
+genus.f12$group<- "stage12"
+genus.f12$genus<- rownames(a)
+
+stage13 <- subset(meta1, stage %in% c("stage1", "stage3"))
+a<- genus2[, rownames(stage13)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f13<-cbind(mean, Pvalue, qvalue)
+genus.f13<- as.data.frame(genus.f13)
+genus.f13$group<- "stage13"
+genus.f13$genus<- rownames(a)
+
+stage14 <- subset(meta1, stage %in% c("stage1", "stage4"))
+a<- genus2[, rownames(stage14)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f14<-cbind(mean, Pvalue, qvalue)
+genus.f14<- as.data.frame(genus.f14)
+genus.f14$group<- "stage14"
+genus.f14$genus<- rownames(a)
+
+stage15 <- subset(meta1, stage %in% c("stage1", "stage5"))
+a<- genus2[, rownames(stage15)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f15<-cbind(mean, Pvalue, qvalue)
+genus.f15<- as.data.frame(genus.f15)
+genus.f15$group<- "stage15"
+genus.f15$genus<- rownames(a)
+
+stage23 <- subset(meta1, stage %in% c("stage2", "stage3"))
+a<- genus2[, rownames(stage23)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f23<-cbind(mean, Pvalue, qvalue)
+genus.f23<- as.data.frame(genus.f23)
+genus.f23$group<- "stage23"
+genus.f23$genus<- rownames(a)
+
+stage24 <- subset(meta1, stage %in% c("stage2", "stage4"))
+a<- genus2[, rownames(stage24)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f24<-cbind(mean, Pvalue, qvalue)
+genus.f24<- as.data.frame(genus.f24)
+genus.f24$group<- "stage24"
+genus.f24$genus<- rownames(a)
+
+stage25 <- subset(meta1, stage %in% c("stage2", "stage5"))
+a<- genus2[, rownames(stage25)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f25<-cbind(mean, Pvalue, qvalue)
+genus.f25<- as.data.frame(genus.f25)
+genus.f25$group<- "stage25"
+genus.f25$genus<- rownames(a)
+
+stage34 <- subset(meta1, stage %in% c("stage3", "stage4"))
+a<- genus2[, rownames(stage34)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f34<-cbind(mean, Pvalue, qvalue)
+genus.f34<- as.data.frame(genus.f34)
+genus.f34$group<- "stage34"
+genus.f34$genus<- rownames(a)
+
+stage35 <- subset(meta1, stage %in% c("stage3", "stage5"))
+a<- genus2[, rownames(stage35)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]))
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f35<-cbind(mean, Pvalue, qvalue)
+genus.f35<- as.data.frame(genus.f35)
+genus.f35$group<- "stage35"
+genus.f35$genus<- rownames(a)
+
+stage45 <- subset(meta1, stage %in% c("stage4", "stage5"))
+a<- genus2[, rownames(stage45)]
+Pvalue<-c(rep(0,nrow(a))) 
+mean<-c(rep(0,nrow(a)))
+for(i in 1:nrow(a)){
+    y=wilcox.test(as.numeric(a[i,1:44]),as.numeric(a[i,45:88]), paired = TRUE)
+    Pvalue[i]<-y$p.value
+    mean[i]<-mean(as.numeric(a[i,45:88]))/mean(as.numeric(a[i,1:44])) 
+}
+qvalue<- qvalue(Pvalue)$qvalue
+genus.f45<-cbind(mean, Pvalue, qvalue)
+genus.f45<- as.data.frame(genus.f45)
+genus.f45$group<- "stage45"
+genus.f45$genus<- rownames(a)
+
+genus.mq <- rbind(genus.f12, genus.f13, genus.f14, genus.f15, genus.f23, genus.f24, genus.f25, genus.f34, genus.f35, genus.f45)
+
+genus.mq.strep <- subset(genus.mq, genus == "g_Streptococcus")
+
+p.new = matrix(nrow=4,ncol=4)
+p.new[1,] <- genus.mq.strep$qvalue[1:4]
+p.new[2,] <- c("NA", genus.mq.strep$qvalue[5:7])
+p.new[3,] <- c(c("NA", "NA"), genus.mq.strep$qvalue[8:9])
+p.new[4,] <- c(c("NA", "NA", "NA"), genus.mq.strep$qvalue[10])
+
+m.new = matrix(nrow=4,ncol=4)
+m.new[1,] <- genus.mq.strep$mean[1:4]
+m.new[2,] <- c("NA", genus.mq.strep$mean[5:7])
+m.new[3,] <- c(c("NA", "NA"), genus.mq.strep$mean[8:9])
+m.new[4,] <- c(c("NA", "NA", "NA"), genus.mq.strep$mean[10])
+
+colnames(p.new) <- c("Stage2", "Stage3", "Stage4", "Stage5")
+rownames(p.new) <- c("Stage1", "Stage2", "Stage3", "Stage4")
+colnames(m.new) <- c("Stage2", "Stage3", "Stage4", "Stage5")
+rownames(m.new) <- c("Stage1", "Stage2", "Stage3", "Stage4")
+
+upper_tri.m <- melt(m.new, na.rm = TRUE)
+upper_tri.m$value <- as.numeric(as.character(upper_tri.m$value))
+
+upper_tri.p <- melt(p.new, na.rm = TRUE)
+upper_tri.p$value <- as.numeric(as.character(upper_tri.p$value))
+upper_tri.p$q <- upper_tri.p$value
+upper_tri.p$q[which(upper_tri.p$value >= 0.05)] = "ns"
+upper_tri.p$q[which(upper_tri.p$value < 0.05)] = "*"
+upper_tri.p$q[which(upper_tri.p$value < 0.01)] = "**" 
+upper_tri.p$q[which(upper_tri.p$value < 0.001)] = "***"
+
+ggplot(upper_tri.m, aes(Var1, Var2))+ 
+ geom_tile(aes(fill = value),colour = "white") + 
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", na.value = "white", midpoint = 1, limit = c(0,2), space = "Lab", name="Fold Change") +
+ theme_bw()+
+ theme(axis.text.x = element_text(vjust = 0.5, hjust = 0.5, angle = 90))+
+ coord_fixed(ratio=1)+
+ theme(axis.text.y = element_text(size = 12))+
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 12, hjust = 1))+
+ labs(x = "", y = "", title = "Streptococcus")+
+ theme(plot.title = element_text(size = 16,hjust = 0.5 ))+
+ theme(legend.key.width=unit(3,'mm'),legend.key.height=unit(1,'cm'))+
+ theme(legend.title = element_blank())+
+ geom_text(data = upper_tri.p, aes(Var1, Var2, label = q), size = 4) +
+ theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.9, 0.05),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5))
+
+tib19o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_19") & stage %in% c("stage4", "stage5"))
+meta19 <- meta(tib19o)
+genus.19 <- as.data.frame(t(genus[c("g_Streptococcus", "g_Prevotella", "g_Neisseria", "g_Gemella"), rownames(meta19)]))
+
+rp.data <- melt(cbind(genus.19, meta19))
+my_comparisons <- list(c("stage4", "stage5"))
+ggplot(rp.data, aes(x=stage,  y=value), shape=8 ) +
+    geom_line(aes(group = student_id), size = 1, color="grey")+
+    geom_point(alpha=0.6, size=2)+
+    geom_boxplot(aes(x=stage, fill= stage), notch=FALSE, alpha=0.7) +
+    stat_summary(aes(x=stage), fun.y=mean, geom="point") +
+    scale_fill_manual(values=c("#1F6F43", "#FF6600"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    facet_grid(.~variable)+
+    theme(axis.text.y = element_text(size=12)) + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 12, hjust = 1))+
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=12,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE, color="red")
+
+
+
+test1=test
+test1[is.na(test1)] <- 0
+data_mark <- test1
+for(i in 1:57){
+    for(j in 1:45){
+        if(test1[i,j] == 3)
+        {
+            data_mark[i,j]="-"
+        }
+        else if(test1[i,j] == -3)
+        {
+            data_mark[i,j]="+"
+        }
+        else
+        {
+            data_mark[i,j]=""
+        }
+    }
+}
+
+p1 <- pheatmap(test, cluster_rows = FALSE, display_numbers = data_mark, na_col = "grey")
+pheatmap(test, cluster_rows = FALSE, display_numbers = data_mark, na_col = "grey", show_colnames = F, show_rownames = F, legend = F)
+
+test3 <- ifelse(test1 >= 3, 1, 0)
+test4 <- ifelse(test1 <= -3, 1, 0)
+Loss <- colSums(test3)
+Gain <- colSums(test4)
+cc <- as.data.frame(rbind(Loss, Gain))
+pheatmap(cc[,p1[["tree_col"]][["order"]]], cluster_rows = FALSE, cluster_cols = FALSE, color = colorRampPalette(c("white", "#1B9E77"))(256))
+
+Loss <- rowSums(test3)
+Gain <- rowSums(test4)
+cc <- as.data.frame(cbind(Loss, Gain))
+pheatmap(cc, cluster_rows = FALSE, cluster_cols = FALSE, color = colorRampPalette(c("white", "#1B9E77"))(256))
+
+
+
+#oroph stage1-2
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18"))
+physeq.op<-  prune_taxa(taxa_sums(physeq.tib18o) > 2, physeq.tib18o)
+otus<- physeq.op@otu_table@.Data
+
+out1 <- vector("list", 45)
+out2 <- vector("list", 45)
+number1<- c(rep(0,45)) 
+number2<- c(rep(0,45))
+
+for (i in 1:9){
+    test<- as.data.frame(otus[, c(paste0("FVS1180", i),paste0("FVS2180", i))][which(rowSums(otus[, c(paste0("FVS1180", i),paste0("FVS2180", i))]) != 0),])
+    out1[[i]]<- rownames(test[which(test[,1] == "0"),])
+    out2[[i]]<- rownames(test[which(test[,2] == "0"),])
+    number1[i]<- nrow(test[which(test[,1] != "0"),]) 
+    number2[i]<- nrow(test[which(test[,2] != "0"),]) 
+}
+
+for (i in 11:45){
+    test<- as.data.frame(otus[, c(paste0("FVS118", i),paste0("FVS218", i))][which(rowSums(otus[, c(paste0("FVS118", i),paste0("FVS218", i))]) != 0),])
+    out1[[i]] <- rownames(test[which(test[,1] == "0"),])
+    out2[[i]] <-rownames(test[which(test[,2] == "0"),])
+    number1[i]<- nrow(test[which(test[,1] != "0"),]) 
+    number2[i]<- nrow(test[which(test[,2] != "0"),])
+}
+
+acquire<- lengths(out1)/number2
+lose<- lengths(out2)/number1
+
+meta <- meta(physeq.op)
+test <- subset(meta, stage=="stage1")
+test$Acquire <- acquire
+test$Lose <- lose
+test$student_id <- factor(test$student_id , levels = test$student_id[order(test$Lose)])
+test1 <- melt(test)
+
+cl <- c('#8c510a','#01665e')
+my_comparisons <- list(c("Acquire", "Lose"))
+
+p1 <- ggplot(data=test1, aes(x = variable, y = value * 100)) +
+    geom_line(aes(group = student_id), size = 1, color="grey", lty=8)+
+    geom_point(aes(color=variable), size=2)+ 
+    geom_boxplot(aes(color=variable), alpha=0.6)+
+    scale_colour_manual(values=cl) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    stat_compare_means(comparisons = my_comparisons, paired = TRUE, color="black",  label = "p.signif")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14,angle = 40, hjust = 0.9, vjust=1),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(strip.text = element_text(colour = 'black', face = 'bold', size = rel(1.2)), strip.background = element_rect(fill = 'white', colour = 'black', size = rel(2), linetype = 1))+
+    labs(y = "ASVs %", x = "")
+
+#oroph stage2-3
+
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18"))
+physeq.op<-  prune_taxa(taxa_sums(physeq.tib18o) > 2, physeq.tib18o)
+otus<- physeq.op@otu_table@.Data
+
+out1 <- vector("list", 45)
+out2 <- vector("list", 45)
+number1<- c(rep(0,45)) 
+number2<- c(rep(0,45))
+
+for (i in 1:9){
+    test<- as.data.frame(otus[, c(paste0("FVS2180", i),paste0("FVS3180", i))][which(rowSums(otus[, c(paste0("FVS2180", i),paste0("FVS3180", i))]) != 0),])
+    out1[[i]]<- rownames(test[which(test[,1] == "0"),])
+    out2[[i]]<- rownames(test[which(test[,2] == "0"),])
+    number1[i]<- nrow(test[which(test[,1] != "0"),]) 
+    number2[i]<- nrow(test[which(test[,2] != "0"),]) 
+}
+
+for (i in 11:45){
+    test<- as.data.frame(otus[, c(paste0("FVS218", i),paste0("FVS318", i))][which(rowSums(otus[, c(paste0("FVS218", i),paste0("FVS318", i))]) != 0),])
+    out1[[i]] <- rownames(test[which(test[,1] == "0"),])
+    out2[[i]] <-rownames(test[which(test[,2] == "0"),])
+    number1[i]<- nrow(test[which(test[,1] != "0"),]) 
+    number2[i]<- nrow(test[which(test[,2] != "0"),])
+}
+
+acquire<- lengths(out1)/number2
+lose<- lengths(out2)/number1
+
+meta <- meta(physeq.op)
+test <- subset(meta, stage=="stage3")
+test$Acquire <- acquire
+test$Lose <- lose
+test$student_id <- factor(test$student_id , levels = test$student_id[order(test$Lose)])
+test1 <- melt(test)
+
+cl <- c('#8c510a','#01665e')
+
+p2 <- ggplot(data=test1, aes(x = variable, y = value * 100)) +
+    geom_line(aes(group = student_id), size = 1, color="grey", lty=8)+
+    geom_point(aes(color=variable), size=2)+ 
+    geom_boxplot(aes(color=variable), alpha=0.6)+
+    scale_colour_manual(values=cl) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    stat_compare_means(comparisons = my_comparisons, paired = TRUE, color="black",  label = "p.signif")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14,angle = 40, hjust = 0.9, vjust=1),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(strip.text = element_text(colour = 'black', face = 'bold', size = rel(1.2)), strip.background = element_rect(fill = 'white', colour = 'black', size = rel(2), linetype = 1))+
+    labs(y = "", x = "")
+p1 | p2
+
+
+#oroph stage1-3
+
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18"))
+physeq.op<-  prune_taxa(taxa_sums(physeq.tib18o) > 2, physeq.tib18o)
+otus<- physeq.op@otu_table@.Data
+
+out1 <- vector("list", 45)
+out2 <- vector("list", 45)
+number1<- c(rep(0,45)) 
+number2<- c(rep(0,45))
+
+for (i in 1:9){
+    test<- as.data.frame(otus[, c(paste0("FVS1180", i),paste0("FVS3180", i))][which(rowSums(otus[, c(paste0("FVS1180", i),paste0("FVS3180", i))]) != 0),])
+    out1[[i]]<- rownames(test[which(test[,1] == "0"),])
+    out2[[i]]<- rownames(test[which(test[,2] == "0"),])
+    number1[i]<- nrow(test[which(test[,1] != "0"),]) 
+    number2[i]<- nrow(test[which(test[,2] != "0"),]) 
+}
+
+for (i in 11:45){
+    test<- as.data.frame(otus[, c(paste0("FVS118", i),paste0("FVS318", i))][which(rowSums(otus[, c(paste0("FVS118", i),paste0("FVS318", i))]) != 0),])
+    out1[[i]] <- rownames(test[which(test[,1] == "0"),])
+    out2[[i]] <-rownames(test[which(test[,2] == "0"),])
+    number1[i]<- nrow(test[which(test[,1] != "0"),]) 
+    number2[i]<- nrow(test[which(test[,2] != "0"),])
+}
+
+acquire<- lengths(out1)/number2
+lose<- lengths(out2)/number1
+
+meta <- meta(physeq.op)
+test <- subset(meta, stage=="stage3")
+test$Acquire <- acquire
+test$Lose <- lose
+test$student_id <- factor(test$student_id , levels = test$student_id[order(test$Lose)])
+test1 <- melt(test)
+
+types <- c(subset(rp, stage == "stage3")$ass, subset(rp, stage == "stage3")$ass)
+test1$types <- types
+test1$tt <- paste(test1$type, test1$types)
+my_comparisons <- list(c("oroph 1", "oroph 2"), c("oroph 3", "oroph 2"), c("oroph 1", "oroph 3"))
+
+ggplot(data=test1, aes(x = tt, y = value * 100, group = types)) +
+    geom_point(aes(color=tt), size=2)+ 
+    geom_boxplot(aes(color=tt), alpha=0.6)+
+    scale_colour_manual(values=col3) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    stat_compare_means(comparisons = my_comparisons, paired = FALSE, color="black",  label = "p.signif")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14,angle = 40, hjust = 0.9, vjust=1),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(strip.text = element_text(colour = 'black', face = 'bold', size = rel(1.2)), strip.background = element_rect(fill = 'white', colour = 'black', size = rel(2), linetype = 1))+
+    labs(y = "ASVs %", x = "")+
+    facet_wrap(.~variable,nrow =1)+
+    theme(strip.text = element_text(colour = 'black', face = 'bold', size = rel(1.2)), strip.background = element_rect(fill = 'white', colour = 'black', size = rel(2), linetype = 1))
+
+
+```
+
+
+fig 6 s6
+```{r}
+
+titer<- read.csv("C:/Users/hui/Desktop/TIV-Manuscript & Figure/Figure/Fig6/stage13.vfar.csv",header = T, sep = ',', row.names = 1)
+titer1 <- titer[, c("stage", "S.mitis", "S.oralis", "S.gwangjuense","L.wadei", "F.nucleatum", "P.intermedia", "VFG1145", "VFG1376", "NP_344871","VFG0328", "VFG1359")]
+titer2 <- melt(titer1)
+col13<- c("#003399", "#CC0033")
+my_comparisons <- list(c("stage1","stage3"))
+ggplot(data=titer2, aes(x = stage, y = value, group=stage, color=stage)) +
+    geom_jitter(width=0.05, height=0, size=2)+ 
+    geom_boxplot(alpha=0.6)+
+    scale_colour_manual(values=col13) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    stat_compare_means(comparisons = my_comparisons, paired = FALSE, color="black", label = "p.signif")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14,angle = 40, hjust = 0.9, vjust=1),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    facet_wrap(.~variable,scales="free", nrow=1)+
+    theme(strip.text = element_text(colour = 'black', face = 'bold', size = rel(0.9)), strip.background = element_rect(fill = 'white', colour = 'black', size = rel(2), linetype = 1))+
+    labs(y="RPKM", x="")+
+    scale_x_discrete(breaks=c("stage1", "stage3"), labels=c("pre-TIV2018", "post-TIV2018"))
+
+
+
+```
+
