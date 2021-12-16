@@ -1,6 +1,6 @@
-### Manuscript title: 
+### Joint contribution of gut and respiratory microbial communities in the immune response to seasonal influenza vaccination
 
- **‘Joint contribution of gut and respiratory microbial communities in the immune response to seasonal influenza vaccination’**
+
 
 ### Context: 
 
