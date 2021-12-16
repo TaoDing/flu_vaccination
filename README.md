@@ -1,4 +1,4 @@
-### Supporting code for manuscript: 
+### Manuscript title: 
 
  **‘Joint contribution of gut and respiratory microbial communities in the immune response to seasonal influenza vaccination’**
 
