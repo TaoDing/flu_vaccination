@@ -1,3 +1,25 @@
+---
+title: "Flu_vaccination"
+output: 
+html_document:
+      toc: yes
+      theme: cerulean
+---
+
+          
+```{r setup, include=FALSE}
+	knitr::opts_chunk$set(echo = TRUE, warning = FALSE, tidy=TRUE, collapse=TRUE)
+```
+
+## figure 2a-c
+
+```{}
+
+
+```
+
+## figure 2d
+
 ```{r}
 
 library(mixOmics)

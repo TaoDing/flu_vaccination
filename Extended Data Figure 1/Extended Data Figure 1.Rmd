@@ -1,0 +1,218 @@
+---
+title: "Flu_vaccination"
+output: 
+html_document:
+      toc: yes
+      theme: cerulean
+---
+
+          
+```{r setup, include=FALSE}
+	knitr::opts_chunk$set(echo = TRUE, warning = FALSE, tidy=TRUE, collapse=TRUE)
+```
+
+
+# extended data figure 1b
+
+```{r}
+library(ggplot2)
+library(plyr)
+library(readr)
+library(reshape2)
+library(patchwork)
+library(cowplot)
+library(ggpubr) 
+	
+	
+titer<- read.csv("Source Data/meta_immune_data.csv",header = T, sep = ',', row.names = 1)
+	
+col<- c("#00AFBB", "#FC4E07","#36BED9")
+
+sub_titer<- titer[,c("pre_H1N1","post_H1N1","Grade")]
+data_2<- melt(sub_titer)
+
+data_2<- na.omit(data_2)
+
+data_2016 <- subset(data_2, Grade %in% c("G1"))
+data_2017 <- subset(data_2, Grade %in% c("G2"))
+data_2018 <- subset(data_2, Grade %in% c("G3"))
+
+cdat_2016 <- ddply(data_2016, "variable", summarise, Titer.mean=mean(value))
+p2016_1<- ggplot(data_2016, aes(x=value, fill=variable)) +
+	    geom_histogram(binwidth=1, alpha=.5, position="identity")+
+	    scale_fill_manual(values=col)+
+	    geom_vline(data=cdat_2016, aes(xintercept=Titer.mean,  colour=c("#FC4E07","#00AFBB" )), linetype="dashed", size=1) +
+	    scale_x_continuous(limits=c(-1,10), breaks=seq(0,10,1))+
+	    scale_y_continuous(limits=c(0,20), breaks=seq(0,20,5))+
+	    theme_bw()+
+	    theme(axis.text.x = element_text(size=12) ,axis.title.x=element_blank(),axis.title.y=element_blank()) + 
+	    theme(legend.position="none")+
+	    coord_flip()
+	
+
+cdat_2017 <- ddply(data_2017, "variable", summarise, Titer.mean=mean(value))
+p2017_1<- ggplot(data_2017, aes(x=value, fill=variable)) +
+	    geom_histogram(binwidth=1, alpha=.5, position="identity")+
+	    scale_fill_manual(values=col)+
+	    geom_vline(data=cdat_2017, aes(xintercept=Titer.mean,  colour=c("#FC4E07","#00AFBB" )), linetype="dashed", size=1) +
+	    scale_x_continuous(limits=c(-1,10), breaks=seq(0,10,1))+
+	    scale_y_continuous(limits=c(0,20), breaks=seq(0,20,5))+
+	    theme_bw()+
+	    theme(axis.text.x = element_text(size=12) ,axis.title.x=element_blank(),axis.title.y=element_blank()) + 
+	    theme(legend.position="none")+
+	    coord_flip()
+	    
+
+cdat_2018 <- ddply(data_2018, "variable", summarise, Titer.mean=mean(value))
+p2018_1<- ggplot(data_2018, aes(x=value, fill=variable)) +
+	    geom_histogram(binwidth=1, alpha=.5, position="identity") +
+	    geom_vline(data=cdat_2018, aes(xintercept=Titer.mean,  colour=c("#FC4E07","#00AFBB" )), linetype="dashed", size=1)+
+	    scale_fill_manual(values=col) +
+	    scale_x_continuous(limits=c(-1,10), breaks=seq(0,10,1)) +
+	    scale_y_continuous(limits=c(0,20), breaks=seq(0,20,5))+
+	    theme_bw()+
+	    theme(axis.text.x = element_text(size=12),axis.title.x=element_blank(),axis.title.y=element_blank()) + 
+	    theme(legend.position="none")+
+	    theme(title=element_text(color="#4F4F4F"))+
+	    coord_flip()
+	
+
+titer2<- read.csv("Source Data/meta_immune_data.csv",header = T, sep = ',')
+
+titer2016 <- subset(titer2, Grade %in% c("G1"))
+sub_titer1<- titer2016[c("id","pre_H1N1", "post_H1N1")]
+sub_titer1$id <- factor(sub_titer1$id, levels = sub_titer1$id[order(sub_titer1$pre_H1N1,sub_titer1$post_H1N1)])
+mydata<-melt(sub_titer1,id.vars='id')
+	
+
+p2016_2<- ggplot(mydata, aes(value,id,fill=variable)) +
+	    geom_line(aes(group = id), size = 1, color="grey") +
+	    geom_point(shape=21,size=3,colour="black")+
+	    scale_fill_manual(values=col)+
+	    theme(
+	        axis.title=element_text(size=13,face="plain",color="white"),
+	        legend.title=element_text(size=12,face="plain",color="black"),
+	        legend.background = element_blank(),
+	        legend.position = c(0.85,0.12)
+	    )+ 
+	    theme(axis.text.x = element_text(angle=90, hjust=1, vjust=.5))+
+	    scale_x_continuous(limits=c(-1, 10), breaks=seq(0, 10, 1))+ 
+	    coord_flip()+ 
+	    background_grid(major = "xy", minor = "none")+ 
+	    theme(legend.position="none")+
+	    theme(axis.text.y = element_text(size=12))
+
+
+titer2017 <- subset(titer2, Grade %in% c("G2"))
+sub_titer1<- titer2017[c("id","pre_H1N1", "post_H1N1")]
+sub_titer1$id <- factor(sub_titer1$id, levels = sub_titer1$id[order(sub_titer1$pre_H1N1,sub_titer1$post_H1N1)])
+mydata<-melt(sub_titer1,id.vars='id')
+	
+p2017_2<- ggplot(mydata, aes(value,id,fill=variable)) +
+	    geom_line(aes(group = id), size = 1, color="grey") +
+	    geom_point(shape=21,size=3,colour="black")+
+	    scale_fill_manual(values=col)+
+	    theme(
+	        axis.title=element_text(size=13,face="plain",color="white"),
+	        legend.title=element_text(size=12,face="plain",color="black"),
+	        legend.background = element_blank(),
+	        legend.position = c(0.85,0.12)
+	    )+ 
+	    theme(axis.text.x = element_text(angle=90, hjust=1, vjust=.5))+
+	    scale_x_continuous(limits=c(-1, 10), breaks=seq(0, 10, 1))+ 
+	    coord_flip()+ 
+	    background_grid(major = "xy", minor = "none")+ 
+	    theme(legend.position="none")+
+	    theme(axis.text.y = element_text(size=12))
+	
+	
+titer2018 <- subset(titer2, Grade %in% c("G3"))
+sub_titer1<- titer2018[c("id","pre_H1N1", "post_H1N1")]
+sub_titer1$id <- factor(sub_titer1$id, levels = sub_titer1$id[order(sub_titer1$pre_H1N1,sub_titer1$post_H1N1)])
+mydata<-melt(sub_titer1,id.vars='id')
+	
+p2018_2<- ggplot(mydata, aes(value,id,fill=variable)) +
+	    geom_line(aes(group = id), size = 1, color="black") +
+	    geom_point(shape=21,size=3,colour="black")+
+	    scale_fill_manual(values=col)+
+	    theme(
+	        axis.title=element_text(size=13,face="plain",color="white"),
+	        legend.title=element_text(size=12,face="plain",color="black"),
+	        legend.background = element_blank(),
+	        legend.position = c(0.85,0.12)
+	    )+ 
+	    theme(axis.text.x = element_text(angle=90, hjust=1, vjust=.5))+
+	    scale_x_continuous(limits=c(-1, 10), breaks=seq(0, 10, 1))+ 
+	    coord_flip()+ 
+	    theme(panel.background = element_rect(fill = "#FDF3EC"))+
+	    background_grid(major = "xy", minor = "none")+ 
+	    theme(axis.text.y = element_text(size=12))+ 
+	    theme(legend.title=element_blank(), legend.text = element_text(size = 12))
+	
+
+(p2016_2+ p2016_1 + plot_layout(nrow = 1, widths = c(3, 1))) / (p2017_2+ p2017_1 + plot_layout(nrow = 1, widths = c(3, 1))) / (p2018_2 + p2018_1 + plot_layout(nrow = 1, widths = c(3, 1))) #fig001
+
+```
+
+# extended data figure 1c
+
+```{r}
+
+
+```
+
+# extended data figure 1d
+
+```{r}
+
+
+```
+
+# extended data figure 1e
+
+```{r}
+
+
+```
+
+# extended data figure 1f-g
+
+```{r}
+titer<- read.csv("Source Data/meta_immune_data.csv",header = T, sep = ',',row.names = 1)
+sub_titer1<- titer[,c("diff_H1N1", "Grade", "h1n1_pre_group", "BMI", "Gender")]
+sub_titer2<- subset(sub_titer1, Grade == "G3" & h1n1_pre_group == "Negative")
+
+p.cor.BMI<- ggplot(data=sub_titer2, aes(x = BMI, y = diff_H1N1)) +
+	        geom_point(alpha=0.6, color="black",size=2)+ 
+	        geom_smooth(method=lm, size=2, color="black")+ 
+	        labs(y= "H1N1 titer change(log)", x="BMI")+
+          theme_bw()+
+	        theme(axis.text.x = element_text(size=14), axis.text.y = element_text(size=14)) +
+	        theme(legend.title = element_blank())+ 
+	        scale_y_continuous(limits=c(0, 10), breaks=seq(0, 10, 1))+
+	        theme(title=element_text(size=14,color="#4F4F4F"))+
+	        theme(legend.position="none")+
+	        stat_cor(data=sub_titer2, method = "spearman", color="black", size=6)
+
+my_comparisons <- list(c("Female", "Male"))
+p.n_p.gender<-  ggplot(sub_titer2, aes(x=Gender,  y=diff_H1N1), shape=8 ) +
+    geom_boxplot(aes(x=Gender, fill=Gender), notch=FALSE) +
+    stat_summary(aes(x=Gender), fun.y=mean, geom="point") +
+    geom_jitter(width=0.2, size=2) +
+        scale_fill_manual(values=c( "#7d639f","#7F7F7F"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    scale_y_continuous(limits=c(0, 11), breaks=seq(0, 10, 2))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons, paired = FALSE, label = "p.signif", color="black", size=6)+
+    labs(y="")
+
+p.cor.BMI | p.n_p.gender 
+
+```
+
