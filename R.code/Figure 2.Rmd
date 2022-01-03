@@ -1,5 +1,5 @@
 ---
-title: "Flu_vaccination"
+title: "Multi-omics analysis revealed that gut P. copri and A. megaguti-associated L-lysine metabolism strengthened the TIV vaccination response"
 output: 
 html_document:
       toc: yes
