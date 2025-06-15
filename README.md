@@ -6,9 +6,7 @@
 
 **R.code**: R scripts used to reproduce all statistical results and visualized pictures.
 
-**Source Data**: The original data analyzed using R are located in the Data folder. 
-
-**Processiong Data**:
+**Source Data**: The original data analyzed using R are located in the Data and Source datas folder. 
 
 Figure 1. The impact of influenza vaccination on the respiratory microbiota is greater than that on the gut
 
