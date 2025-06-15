@@ -34,7 +34,7 @@ Extended Data Fig.6. Analysis of the association between S. copri, PAA, PAGln, a
 
 Extended Data Fig.7. S. copri enhances TIV response by restricting production of PAGln
 
-Extended Data Fig. 8. Gene expression and functional characteristics of the spleen following PAGln injection
+Extended Data Fig.8. Gene expression and functional characteristics of the spleen following PAGln injection
 
 Extended Data Fig.9. Gene expression and functional characteristics of the GCB cells in the spleen following PAGln injection
  
