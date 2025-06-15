@@ -1,0 +1,366 @@
+---
+title: "Fig-02 & sFig-02"
+output: html_document
+date: "2024-10-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+library(vegan)
+library(picante)
+library(phyloseq)
+library(plyr)
+library(ggplot2)
+library(plyr)
+library(reshape2)
+library(patchwork) 
+library(cowplot)
+library(ggpubr) 
+library(GUniFrac)
+library(microbiome)
+library(ggsci)
+library(microeco)
+library(file2meco)
+library (stringr)
+library(ggprism)
+library(ggalluvial)
+library(ggrepel)
+
+load('16S/physeq.tiv16sall.Rdata')
+physeq<- physeq.tiv16sall
+
+```
+
+##Figure-2
+
+```{r}
+
+####2A
+
+physeq.tib<- subset_samples(physeq, type %in% c("fecal", "oroph") & national=="tibetan" & grade == "grade_18" & stage %in% c("stage1", "stage3", "stage4", "stage5"))
+physeq.tib.p <- subset_samples(physeq.tib, student_id %in% names(which(table(physeq.tib@sam_data$student_id)==8)))
+physeq.fo<-  prune_taxa(taxa_sums(physeq.tib.p) > 0, physeq.tib.p)
+
+unifrac.fo<- phyloseq::distance(subset_samples(physeq.fo, stage == "stage1"), "unifrac")
+dis.fo<- as.matrix(unifrac.fo)
+dis.fo1<- diag(dis.fo[c(1:42), c(43:84)])
+
+unifrac.fo<- phyloseq::distance(subset_samples(physeq.fo, stage == "stage3"), "unifrac")
+dis.fo<- as.matrix(unifrac.fo)
+dis.fo2<- diag(dis.fo[c(1:42), c(43:84)])
+
+unifrac.fo<- phyloseq::distance(subset_samples(physeq.fo, stage == "stage4"), "unifrac")
+dis.fo<- as.matrix(unifrac.fo)
+dis.fo3<- diag(dis.fo[c(1:42), c(43:84)])
+
+unifrac.fo<- phyloseq::distance(subset_samples(physeq.fo, stage == "stage5"), "unifrac")
+dis.fo<- as.matrix(unifrac.fo)
+dis.fo4<- diag(dis.fo[c(1:42), c(43:84)])
+
+
+data.dis.fo<- cbind(dis.fo1, dis.fo2, dis.fo3, dis.fo4)
+shape.data.dis.fo <- melt(data.dis.fo)
+
+my_comparisons<- list(c("dis.fo1", "dis.fo2"),  c("dis.fo3", "dis.fo4"))
+col <- c("#4e71b9", "#db4d71", "#1b9e77", "#ff944d")
+ggplot(data=shape.data.dis.fo, aes(x=Var2, y=value, fill =Var2))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2,  size=2)+
+    scale_fill_manual(values=col)+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+
+    theme(legend.position='none')+
+    scale_x_discrete(breaks=c("dis.fo1", "dis.fo2", "dis.fo3", "dis.fo4"), labels=c("pre-2018", "post-2018", "pre-2019", "post-2019"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons, paired = TRUE)+
+    labs(y="unweighted UniFrac distances") 
+
+####2B
+physeq.18<- subset_samples(physeq, type %in% c("fecal") & national=="tibetan" & grade == "grade_18" & stage %in% c("stage1", "stage3"))
+phys = microbiome::transform(physeq.18, 'compositional')
+phys <-  prune_taxa(taxa_sums(phys) > 0, phys)
+genus.p = tax_glom(phys, "Genus")
+meco_dataset <- phyloseq2meco(genus.p)
+ts1 <- trans_diff$new(dataset = meco_dataset, method = "lefse", 
+                     group = "stage", alpha = 0.05, p_adjust_method = "non",
+                     lefse_subgroup = NULL, taxa_level = "Genus")
+
+physeq.18<- subset_samples(physeq, type %in% c("fecal") & national=="tibetan" & grade == "grade_18" & stage %in% c("stage4", "stage5"))
+phys = microbiome::transform(physeq.18, 'compositional')
+phys <-  prune_taxa(taxa_sums(phys) > 0, phys)
+genus.p = tax_glom(phys, "Genus")
+meco_dataset <- phyloseq2meco(genus.p)
+ts2 <- trans_diff$new(dataset = meco_dataset, method = "lefse", 
+                     group = "stage", alpha = 0.05, p_adjust_method = "non",
+                     lefse_subgroup = NULL, taxa_level = "Genus")
+
+names <- intersect(rownames(ts2[["res_diff"]]), rownames(ts1[["res_diff"]]))
+data_melt <- ts1[["res_diff"]][names,]
+data_melt$Taxa <- str_split_fixed(data_melt$Taxa, 'g__', 2)[,2]
+or1 <- subset(data_melt, Group == "stage1")
+or2 <- subset(data_melt, Group == "stage3")
+or <- c(or1$Taxa[rev(order(or1$LDA))], or2$Taxa[order(or2$LDA)])
+data_melt$Taxa <- factor(data_melt$Taxa, levels = or)
+ggplot(data_melt, aes(x = Group, y = Taxa, size = LDA, color= Group)) + geom_point()+
+    theme(panel.background = element_blank(),
+          panel.grid.major = element_line(colour = "gray"),
+          panel.border = element_rect(colour="black",fill=NA))+
+    scale_colour_manual(values= c("#4e71b9", "#CC0033"))
+
+data_melt <- ts2[["res_diff"]][names,]
+data_melt$Taxa <- str_split_fixed(data_melt$Taxa, 'g__', 2)[,2]
+data_melt$Taxa <- factor(data_melt$Taxa, levels = or)
+ggplot(data_melt, aes(x = Group, y = Taxa, size = LDA, color= Group)) + geom_point()+
+    theme(panel.background = element_blank(),
+          panel.grid.major = element_line(colour = "gray"),
+          panel.border = element_rect(colour="black",fill=NA))+
+    scale_colour_manual(values= c("#1b9e77", "#ff944d"))
+
+
+
+```
+
+
+
+##sFigure-2
+
+```{r}
+
+####s2A-B
+# Graphpad
+# Cytoscape
+
+####s2C
+physeq.18<- subset_samples(physeq, type %in% c("fecal") & national=="tibetan" & 
+            grade == "grade_18" & 
+            stage %in% c("stage1", "stage3"))
+phys = microbiome::transform(physeq.18, 'compositional')
+phys <-  prune_taxa(taxa_sums(phys) > 0, phys)
+phys = tax_glom(phys, "Genus")
+otus <- as.data.frame(phys@otu_table@.Data)
+tax <- as.data.frame(phys@tax_table@.Data)
+tax1 <- tax[!duplicated(tax$Genus),]
+otus1 <- otus[rownames(tax1),]
+rownames(otus1) <- tax1$Genus
+rownames(otus1) <- str_split_fixed(rownames(otus1), 'g_', 2)[,2]
+otus3 <- as.data.frame(t(otus1))
+otus3$group <- meta(phys)$stage
+
+ggplot(data=otus3, aes(x=group, y=Bifidobacterium, fill =group))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2, size=2)+
+    scale_fill_manual(values= c("#4e71b9", "#db4d71"))+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+
+    theme(legend.position='none')+
+    stat_compare_means(comparisons = list(c("stage1", "stage3")), paired = FALSE)+
+    scale_x_discrete(breaks=c("stage1", "stage3"), labels=c("pre-2018", "post-2018"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y="Relative Abundance %") 
+
+
+## metagenomics data
+
+sp <- read.csv("metagenomics/sp.csv",header = T, sep = ',', row.names = 1)
+tax <- read.csv("metagenomics/tax.csv",header = T, sep = ',', row.names = 1)
+meta <- read.csv("metagenomics/meta.csv",header = T, sep = ',', row.names = 1)
+OTU = otu_table(sp, taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(tax))
+sampledata<- sample_data(meta)
+physeq = merge_phyloseq(OTU, TAX, sampledata)
+
+
+sps = subset_taxa(physeq, species != "" & genus == "g_Bifidobacterium")
+sps.f<- subset_samples(sps, type %in% c("fecal") & stage %in% c("stage1", "stage3"))
+phys = microbiome::transform(sps.f, 'compositional')
+phys <-  prune_taxa(taxa_sums(phys) > 0, phys)
+cols15 = c("#660066", "#56B4E9", "#009E73", "#FF0000", "#F0E442", "#D55E00",  "#333333", "#CC79A7","#990000","#9900cc","#66FF66","#663300","#0000FF","#CC0033","#999999")
+meta <- meta(phys)
+otus <- as.data.frame(phys@otu_table@.Data)
+tax <- as.data.frame(phys@tax_table@.Data)
+tax1 <- tax[!duplicated(tax$species),]
+otus1 <- otus[rownames(tax1),]
+rownames(otus1) <- tax1$species
+tax_stackplot(otus1, meta, groupID="stage", topN=7, style="group")+ scale_fill_manual(values=cols15)
+
+```
+
+
+
+```{r}
+####s2D
+sp <- read.csv("metagenomics/sp.csv",header = T, sep = ',', row.names = 1)
+tax <- read.csv("metagenomics/tax.csv",header = T, sep = ',', row.names = 1)
+meta <- read.csv("metagenomics/meta.csv",header = T, sep = ',', row.names = 1)
+OTU = otu_table(sp, taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(tax))
+sampledata<- sample_data(meta)
+physeq = merge_phyloseq(OTU, TAX, sampledata)
+
+sps = subset_taxa(physeq, species != "")
+sps.f<- subset_samples(sps, type %in% c("fecal") & stage %in% c("stage1", "stage3"))
+phys = microbiome::transform(sps.f, 'compositional')
+phys <-  prune_taxa(taxa_sums(phys) > 0, phys)
+phy = subset_taxa(phys, genus == "g_Bifidobacterium")
+meta <- meta(phy)
+otus <- as.data.frame(phy@otu_table@.Data)
+tax <- as.data.frame(phy@tax_table@.Data)
+tax1 <- tax[!duplicated(tax$species),]
+otus1 <- otus[rownames(tax1),]
+rownames(otus1) <- tax1$species
+otus3 <- as.data.frame(t(otus1*100))
+otus3$group <- meta(phy)$stage
+otus5 <- melt(otus3)
+ggplot(data=otus5, aes(x=group, y=value, fill =group))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2,  size=2)+
+    scale_fill_manual(values=c("#4e71b9", "#db4d71"))+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    facet_grid(~variable, scales="free")+
+    scale_x_discrete(breaks=c("stage1", "stage3"), labels=c("pre", "post"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = list(c("stage1", "stage3")), paired = FALSE, method ="t.test")
+
+
+####s2E
+
+library(dplyr)
+library(rstatix)
+library(reshape2)
+
+ar <- read.csv("metagenomics/AR.csv",header = T, sep = ',', row.names = 1)
+pa <- read.csv("metagenomics/pathway.csv",header = T, sep = ',', row.names = 1)
+vf <- read.csv("metagenomics/VF.csv",header = T, sep = ',', row.names = 1)
+meta <- read.csv("metagenomics/meta.csv",header = T, sep = ',', row.names = 1)
+
+
+int <- intersect(colnames(pa), rownames(meta))
+pat <- pa[,int]
+met <- meta[int,]
+met1 <- subset(met, type == "fecal" & stage != "stage2")
+pat1 <-as.data.frame(t(pat[,rownames(met1)]))
+pat1 <- pat1[,which(colSums(pat1) != 0)]
+pat1$stage <- met1$stage
+result1=melt(pat1) %>%
+    group_by(variable) %>%
+    wilcox_test(value ~ stage)
+
+result1$logFC <- log2((colMeans(pat1[rownames(subset(met1, stage == "stage3")),-422])+0.000001)/(colMeans(pat1[rownames(subset(met1, stage == "stage1")),-422])+0.000001))
+result1$label <- ifelse(abs(result1$logFC) > 1 & result1$p < 0.05, as.character(result1$variable), "")
+
+ggplot(
+    result1, aes(x = logFC, y = -log10(p))) +
+    geom_point(alpha=0.8,  size=3, color = "grey") +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    geom_vline(xintercept = c(-1,1),lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.5) +
+    labs(x="log2 (fold change)",
+         y="-log10 (P.value)")+
+    theme_bw()+
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_text_repel(data = result1, aes(x = logFC, y = -log10(p),
+                                      label = label),color = "black",
+                    size = 3, box.padding = unit(0.5, "lines"),
+                    point.padding = unit(0.8, "lines"), 
+                    segment.color = "black", 
+                    show.legend = FALSE)
+
+
+int <- intersect(intersect(colnames(ar), colnames(vf)),  rownames(meta))
+arvf <- rbind(ar[,int], vf[,int])
+met <- meta[int,]
+met1 <- subset(met, type == "fecal" & stage != "stage2")
+arvf1 <-as.data.frame(t(arvf[,rownames(met1)]))
+arvf1 <- arvf1[,which(colSums(arvf1) != 0)]
+arvf1$stage <- met1$stage
+result=melt(arvf1) %>%
+  group_by(variable) %>%
+  wilcox_test(value ~ stage)
+
+result$logFC <- log2((colMeans(arvf1[rownames(subset(met1, stage == "stage3")),-339])+0.01)/(colMeans(arvf1[rownames(subset(met1, stage == "stage1")),-339])+0.01))
+result$label <- ifelse(abs(result$logFC) > 1 & result$p < 0.05, as.character(result$variable), "")
+
+ggplot(
+    result, aes(x = logFC, y = -log10(p))) +
+    geom_point(alpha=0.8, size=3, color = "grey") +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    geom_vline(xintercept = c(-1,1),lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.5) +
+    labs(x="log2 (fold change)",
+         y="-log10 (P.value)")+
+    theme_bw()+
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_text_repel(data = result, aes(x = logFC, y = -log10(p),
+                                      label = label),color = "black",
+                    size = 3, box.padding = unit(0.5, "lines"),
+                    point.padding = unit(0.8, "lines"), 
+                    segment.color = "black", 
+                    show.legend = FALSE)
+
+
+####s2F
+
+ggplot(data=pat1, aes(x=stage, y=`P124-PWY: Bifidobacterium shunt`, fill =stage))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2,  size=2)+
+    scale_fill_manual(values=c("#4e71b9", "#db4d71"))+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    scale_x_discrete(breaks=c("stage1", "stage3"), labels=c("pre", "post"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = list(c("stage1", "stage3")), paired = FALSE)
+
+
+
+ggplot(data=arvf1, aes(x=stage, y=ZP_02422325, fill =stage))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2,  size=2)+
+    scale_fill_manual(values=c("#4e71b9", "#db4d71"))+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    scale_x_discrete(breaks=c("stage1", "stage3"), labels=c("pre", "post"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = list(c("stage1", "stage3")), paired = FALSE)
+
+
+```

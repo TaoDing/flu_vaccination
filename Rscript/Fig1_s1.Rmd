@@ -1,0 +1,596 @@
+---
+title: "Fig-01 & sFig-01"
+output: html_document
+date: "2024-10-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+library(vegan)
+library(picante)
+library(phyloseq)
+library(plyr)
+library(ggplot2)
+library(plyr)
+library(reshape2)
+library(patchwork) #拼图
+library(cowplot)
+library(ggpubr) #统计
+library(GUniFrac)
+library(microbiome)
+library(ggsci)
+
+load('16S/physeq.tiv16sall.Rdata')
+physeq<- physeq.tiv16sall
+
+```
+
+
+##Figure-1
+
+```{r}
+titer<- read.csv("16S/meta_immune_data.csv",header = T, sep = ',',row.names = 1)
+groups<- read.csv("16S/immune.groups.csv",header = T, sep = ',',row.names = 1)
+
+
+### 1B D
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan")
+physeq.fp<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+
+fp.sh <- plot_richness(physeq.fp, "stage", measures= "Shannon")
+shannon.oroph <- fp.sh$data
+
+so <- subset(shannon.oroph, grade %in% c("grade_18") & value < 5 )
+my_comparisons <- list(c("stage1", "stage2"), c("stage2", "stage3"),  c("stage4", "stage5"))
+p1 <- ggplot(so, aes(x=stage,  y=value), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage1", "stage2", "stage3", "stage4", "stage5"), labels=c("Pre", "2w", "Post", "Pre", "Post"))+
+    labs(title = "Cohort I")
+
+so <- subset(shannon.oroph, grade %in% c("grade_16", "grade_17") )
+my_comparisons <- list(c("stage1", "stage2"), c("stage2", "stage3"),  c("stage4", "stage5"))
+p2 <- ggplot(so, aes(x=stage,  y=value), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage1", "stage2", "stage3", "stage4", "stage5"), labels=c("Pre", "2w", "Post", "Pre", "Post"))+
+    labs(title = "Cohort II")
+
+so <- subset(shannon.oroph, grade %in% c("grade_19") )
+my_comparisons <- list(c("stage4", "stage5"))
+p3 <- ggplot(so, aes(x=stage,  y=value), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage4", "stage5"), labels=c("Pre", "Post"))+
+    labs(title = "Cohort III")
+
+ 
+
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan")
+physeq.fp<-  prune_taxa(taxa_sums(physeq.tib) > 0, physeq.tib)
+
+fp.sh <- plot_richness(physeq.fp, "stage", measures= "Shannon")
+shannon.oroph <- fp.sh$data
+
+so <- subset(shannon.oroph, grade %in% c("grade_18") )
+my_comparisons <- list(c("stage1", "stage2"), c("stage2", "stage3"),  c("stage4", "stage5"))
+p4 <- ggplot(so, aes(x=stage,  y=value), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage1", "stage2", "stage3", "stage4", "stage5"), labels=c("Pre", "2w", "Post", "Pre", "Post"))+
+    labs(title = "Cohort I")
+
+so <- subset(shannon.oroph, grade %in% c("grade_16", "grade_17") )
+my_comparisons <- list(c("stage1", "stage2"), c("stage2", "stage3"),  c("stage4", "stage5"))
+p5 <- ggplot(so, aes(x=stage,  y=value), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c( "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage1", "stage2", "stage3", "stage4", "stage5"), labels=c("Pre", "2w", "Post", "Pre", "Post"))+
+    labs(title = "Cohort II")
+
+so <- subset(shannon.oroph, grade %in% c("grade_19") )
+my_comparisons <- list(c("stage4", "stage5"))
+p6 <- ggplot(so, aes(x=stage,  y=value), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage4", "stage5"), labels=c("Pre", "Post"))+
+    labs(title = "Cohort III")
+
+(p1|p2|p3+ plot_layout(widths = c(2, 2, 1)))/(p4|p5|p6+ plot_layout(widths = c(2, 2, 1)))
+
+
+### 1D E
+## sfigure
+
+physeqs <-  subset_samples(physeq, type=="oroph"&national=="tibetan" & grade %in% c("grade_18"))
+GP.ord <- ordinate(physeqs, "PCoA", "bray")
+data1<- plot_ordination(physeqs, GP.ord, color="stage")
+data2 <- data1$data
+ggscatter(data2, x= "Axis.1", y = "Axis.2", size = 3,
+          color = "stage", palette = c("#1b9e77", "#ff944d"),
+          ellipse = TRUE, ellipse.level = 0.3, 
+          mean.point = TRUE, star.plot = FALSE, 
+          ggtheme = theme_minimal())+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+
+my_comparisons <- list(c("stage1", "stage2"), c("stage2", "stage3"), c("stage4", "stage5"))
+p1 <- ggplot(data2, aes(x=stage,  y=Axis.1), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage1", "stage2", "stage3", "stage4", "stage5"), labels=c("Pre", "2w", "Post", "Pre", "Post"))+
+    labs(title = "Cohort I")
+
+physeqs <-  subset_samples(physeq, type=="oroph"&national=="tibetan" & grade %in% c("grade_18") & stage %in% c("stage1", "stage2", "stage3"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+physeqs <-  subset_samples(physeq, type=="oroph"&national=="tibetan" & grade %in% c("grade_18") & stage %in% c("stage4", "stage5"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+
+physeqs <-  subset_samples(physeq, type=="fecal"&national=="tibetan" & grade %in% c("grade_18"))
+GP.ord <- ordinate(physeqs, "PCoA", "bray")
+data1<- plot_ordination(physeqs, GP.ord, color="stage")
+data2 <- data1$data
+ggscatter(data2, x= "Axis.1", y = "Axis.2", size = 3,
+          color = "stage", palette = c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"),
+          ellipse = TRUE, ellipse.level = 0.3, 
+          mean.point = TRUE, star.plot = FALSE, 
+          ggtheme = theme_minimal())+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+
+
+my_comparisons <- list(c("stage1", "stage2"), c("stage2", "stage3"), c("stage4", "stage5"))
+p4 <- ggplot(data2, aes(x=stage,  y=Axis.1), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage1", "stage2", "stage3", "stage4", "stage5"), labels=c("Pre", "2w", "Post", "Pre", "Post"))+
+    labs(title = "Cohort I")
+
+
+physeqs <-  subset_samples(physeq, type=="fecal"&national=="tibetan" & grade %in% c("grade_18") & stage %in% c("stage1", "stage2", "stage3"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+physeqs <-  subset_samples(physeq, type=="fecal"&national=="tibetan" & grade %in% c("grade_18") & stage %in% c("stage4", "stage5"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+
+
+physeqs <-  subset_samples(physeq, type=="oroph"&national=="tibetan" & grade %in% c("grade_16", "grade_17"))
+GP.ord <- ordinate(physeqs, "PCoA", "bray")
+data1<- plot_ordination(physeqs, GP.ord, color="stage")
+data2 <- data1$data
+ggscatter(data2, x= "Axis.1", y = "Axis.2", size = 3,
+          color = "stage", palette = c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"),
+          ellipse = TRUE, ellipse.level = 0.3, 
+          mean.point = TRUE, star.plot = FALSE, 
+          ggtheme = theme_minimal())+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+
+my_comparisons <- list(c("stage1", "stage2"), c("stage2", "stage3"), c("stage4", "stage5"))
+p2 <- ggplot(data2, aes(x=stage,  y=Axis.1), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage1", "stage2", "stage3", "stage4", "stage5"), labels=c("Pre", "2w", "Post", "Pre", "Post"))+
+    labs(title = "Cohort II")
+
+
+physeqs <-  subset_samples(physeq, type=="oroph"&national=="tibetan" & grade %in% c("grade_16", "grade_17") & stage %in% c("stage1", "stage2", "stage3"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+physeqs <-  subset_samples(physeq, type=="oroph"&national=="tibetan" & grade %in% c("grade_16", "grade_17") & stage %in% c("stage4", "stage5"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+
+physeqs <-  subset_samples(physeq, type=="fecal"&national=="tibetan" & grade %in% c("grade_16", "grade_17"))
+GP.ord <- ordinate(physeqs, "PCoA", "bray")
+data1<- plot_ordination(physeqs, GP.ord, color="stage")
+data2 <- data1$data
+ggscatter(data2, x= "Axis.1", y = "Axis.2", size = 3,
+          color = "stage", palette = c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"),
+          ellipse = TRUE, ellipse.level = 0.3, 
+          mean.point = TRUE, star.plot = FALSE, 
+          ggtheme = theme_minimal())+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+
+my_comparisons <- list(c("stage1", "stage2"), c("stage2", "stage3"), c("stage4", "stage5"))
+p5 <- ggplot(data2, aes(x=stage,  y=Axis.1), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage1", "stage2", "stage3", "stage4", "stage5"), labels=c("Pre", "2w", "Post", "Pre", "Post"))+
+    labs(title = "Cohort II")
+
+
+physeqs <-  subset_samples(physeq, type=="fecal"&national=="tibetan" & grade %in% c("grade_16", "grade_17") & stage %in% c("stage1", "stage2", "stage3"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+physeqs <-  subset_samples(physeq, type=="fecal"&national=="tibetan" & grade %in% c("grade_16", "grade_17") & stage %in% c("stage4", "stage5"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+
+
+physeqs <-  subset_samples(physeq, type=="oroph"&national=="tibetan" & grade %in% c("grade_19"))
+GP.ord <- ordinate(physeqs, "PCoA", "bray")
+data1<- plot_ordination(physeqs, GP.ord, color="stage")
+data2 <- data1$data
+ggscatter(data2, x= "Axis.1", y = "Axis.2", size = 3,
+          color = "stage", palette = c( "#1b9e77", "#ff944d"),
+          ellipse = TRUE, ellipse.level = 0.3, 
+          mean.point = TRUE, star.plot = FALSE, 
+          ggtheme = theme_minimal())+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+
+my_comparisons <- list(c("stage4", "stage5"))
+p3 <- ggplot(data2, aes(x=stage,  y=Axis.1), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage4", "stage5"), labels=c("Pre", "Post"))+
+    labs(title = "Cohort III")
+
+
+physeqs <-  subset_samples(physeq, type=="oroph"&national=="tibetan" & grade %in% c("grade_19") & stage %in% c("stage4", "stage5"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+
+physeqs <-  subset_samples(physeq, type=="fecal"&national=="tibetan" & grade %in% c( "grade_19"))
+GP.ord <- ordinate(physeqs, "PCoA", "bray")
+data1<- plot_ordination(physeqs, GP.ord, color="stage")
+data2 <- data1$data
+ggscatter(data2, x= "Axis.1", y = "Axis.2", size = 3,
+          color = "stage", palette = c( "#1b9e77", "#ff944d"),
+          ellipse = TRUE, ellipse.level = 0.3, 
+          mean.point = TRUE, star.plot = FALSE,  
+          ggtheme = theme_minimal())+
+    xlab(data1[["labels"]][["x"]]) + ylab(data1[["labels"]][["y"]])+
+    theme(axis.title.x = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme(axis.title.y = element_text(size = 16,
+                                      face = "bold", 
+                                      vjust = 0.5, 
+                                      hjust = 0.5))+
+    theme_bw()
+
+
+my_comparisons <- list(c("stage4", "stage5"))
+p6 <- ggplot(data2, aes(x=stage,  y=Axis.1), shape=8 ) +
+    geom_boxplot(aes(x=stage, fill=stage), notch=FALSE) +
+    stat_summary(size=3, fun.y=mean, geom="point", color = "white") +
+    geom_jitter(size=3,  width = 0.1, color = "grey") +
+    scale_fill_manual(values=c("#4e71b9", "#092556", "#db4d71", "#1b9e77", "#ff944d"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(axis.title.x =element_blank())+
+    stat_compare_means(comparisons = my_comparisons,  paired = FALSE) +
+    scale_x_discrete(breaks=c("stage4", "stage5"), labels=c("Pre", "Post"))+
+    labs(title = "Cohort III")
+
+
+physeqs <-  subset_samples(physeq, type=="fecal"&national=="tibetan" & grade %in% c("grade_19") & stage %in% c("stage4", "stage5"))
+meta <- meta(physeqs)
+dis_bray.f<- phyloseq::distance(physeqs, "bray")
+set.seed(002)
+adonis2(dis_bray.f~ meta(physeqs)$stage, perm=999)
+
+
+(p1|p2|p3+ plot_layout(widths = c(2, 2, 1)))/(p4|p5|p6+ plot_layout(widths = c(2, 2, 1)))
+
+### s1E
+titer<- read.csv("16S/meta_immune_data.csv",header = T, sep = ',',row.names = 1)
+groups<- read.csv("16S/immune.groups.csv",header = T, sep = ',',row.names = 1)
+
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan"& grade %in% c("grade_18", "grade_17","grade_16" )&stage=="stage1")
+physeq.great <- prune_taxa(taxa_sums(physeq.tib) > 10, physeq.tib)
+meta <- meta(physeq.great)
+
+sub_titer <- titer[,c(12,13,25:46)]
+ 
+for (i in colnames(sub_titer))
+{
+    med <- median(na.omit(sub_titer[,i]))
+    sub_titer[,i][sub_titer[,i] > med] <- "High"
+    sub_titer[,i][sub_titer[,i] != "High" & sub_titer[,i] != "NA"] <- "Low"
+}
+sub_titer$Gender <- titer$Gender
+sub_titer$TIV_record <- titer$TIV_record
+
+adon.results <- matrix(NA,ncol(sub_titer),2)
+rownames(adon.results) <- colnames(sub_titer)
+
+for (i in colnames(sub_titer))
+{
+names <- intersect(meta$student_id, rownames(sub_titer)[sub_titer[,i] != "NA"])
+sample_data(physeq.great)$human <- get_variable(physeq.great, "student_id") %in% names
+sub_physeq<- subset_samples(physeq.great, human=="TRUE")
+dis_bray.f<- phyloseq::distance(sub_physeq, "unifrac")
+sub <- sub_titer[names,]
+adonis<-adonis2(dis_bray.f~ sub[,i], perm=999)
+adon.results[i,] <- c(adonis$R2[1],  adonis$`Pr(>F)`[1])
+}
+adon.results <- as.data.frame(adon.results)
+colnames(adon.results) <- c("Adonis-R2", "P.value")
+adon.results$p.adj <- p.adjust(as.numeric(adon.results[,2]), method = "bonferroni")
+f.uniq <- adon.results
+
+f.uniq$names <- rownames(f.uniq)
+f.uniq$groups <- groups[rownames(f.uniq),]
+f.uniq$names <- factor(f.uniq$names, levels=f.uniq$names[order(f.uniq$`Adonis-R2`)])
+ggplot(f.uniq, aes(y=names, x=`Adonis-R2`)) + 
+    geom_bar(aes(y=names, x=`Adonis-R2`, fill=groups), stat = "identity", color = "black", alpha = 0.65) +
+    xlim(0, 0.07)+
+    scale_fill_lancet()+
+    theme_classic()+ 
+    theme(legend.title = element_blank())+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(title= "Fecal", y="", x="Adonis-R2")+
+    geom_vline(xintercept=c(0.02,0.04, 0.06),linetype=5,col="grey")
+
+
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18", "grade_17","grade_16" )&stage=="stage1")
+physeq.great <- prune_taxa(taxa_sums(physeq.tib) > 10, physeq.tib)
+meta <- meta(physeq.great)
+
+sub_titer <- titer[,c(12,13,25:46)]
+
+for (i in colnames(sub_titer))
+{
+    med <- median(na.omit(sub_titer[,i]))
+    sub_titer[,i][sub_titer[,i] > med] <- "High"
+    sub_titer[,i][sub_titer[,i] != "High" & sub_titer[,i] != "NA"] <- "Low"
+}
+sub_titer$Gender <- titer$Gender
+sub_titer$TIV_record <- titer$TIV_record
+
+adon.results <- matrix(NA,ncol(sub_titer),2)
+rownames(adon.results) <- colnames(sub_titer)
+
+for (i in colnames(sub_titer))
+{
+    names <- intersect(meta$student_id, rownames(sub_titer)[sub_titer[,i] != "NA"])
+    sample_data(physeq.great)$human <- get_variable(physeq.great, "student_id") %in% names
+    sub_physeq<- subset_samples(physeq.great, human=="TRUE")
+    dis_bray.f<- phyloseq::distance(sub_physeq, "unifrac")
+    sub <- sub_titer[names,]
+    adonis<-adonis2(dis_bray.f~ sub[,i], perm=999)
+    adon.results[i,] <- c(adonis$R2[1],  adonis$`Pr(>F)`[1])
+}
+adon.results <- as.data.frame(adon.results)
+colnames(adon.results) <- c("Adonis-R2", "P.value")
+adon.results$p.adj <- p.adjust(as.numeric(adon.results[,2]), method = "bonferroni")
+f.uniq <- adon.results
+
+f.uniq$names <- rownames(f.uniq)
+f.uniq$groups <- groups[rownames(f.uniq),]
+f.uniq$names <- factor(f.uniq$names, levels=f.uniq$names[order(f.uniq$`Adonis-R2`)])
+ggplot(f.uniq, aes(y=names, x=`Adonis-R2`)) + 
+    geom_bar(aes(y=names, x=`Adonis-R2`, fill=groups), stat = "identity", color = "black", alpha = 0.65) +
+    xlim(0, 0.07)+
+    scale_fill_lancet()+
+    theme_classic()+ 
+    theme(legend.title = element_blank())+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(title= "Fecal", y="", x="Adonis-R2")+
+    geom_vline(xintercept=c(0.02,0.04, 0.06),linetype=5,col="grey")
+
+```
+

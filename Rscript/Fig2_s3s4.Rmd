@@ -1,0 +1,328 @@
+---
+title: "Fig-03 & sFig-03"
+output: html_document
+date: "2024-10-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+
+library(vegan)
+library(picante)
+library(phyloseq)
+library(plyr)
+library(ggplot2)
+library(plyr)
+library(reshape2)
+library(patchwork) #拼图
+library(cowplot)
+library(ggpubr) #统计
+library(GUniFrac)
+library(microbiome)
+library(ggsci)
+library(microeco)
+library(file2meco)
+library(stringr)
+library(ggprism)
+library(ggalluvial)
+library(ggrepel)
+library(nlme)
+library(DirichletMultinomial)
+library(parallel)
+
+
+load('16S/physeq.tiv16sall.Rdata')
+physeq<- physeq.tiv16sall
+
+```
+
+
+
+```{r}
+
+####s3A
+
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18"))
+physeq.r = rarefy_even_depth(physeq.tib18o, sample.size = 10000, replace = TRUE)
+physeq.r <-  prune_taxa(taxa_sums(physeq.r) > 0, physeq.r)
+genus = tax_glom(physeq.r, "Genus")
+genus1 = filter_taxa(genus, function(x) sum(x > 0) > (0.1*length(x)), TRUE)
+gp <- as.matrix(genus1@otu_table)
+rownames(gp) <- str_split_fixed(as.data.frame(genus1@tax_table)$Genus, 'g_', 2)[,2] 
+count <- as.matrix(t(gp))
+fit <- mclapply(1:5, dmn, count = count, verbose=TRUE)
+lplc <- sapply(fit, laplace) # AIC / BIC / Laplace
+aic  <- sapply(fit, AIC) # AIC / BIC / Laplace
+bic  <- sapply(fit, BIC) # AIC / BIC / Laplace
+#plot(lplc, type="b", xlab="Number of Dirichlet Components", ylab="Model Fit")
+#lines(aic, type="b", lty = 2)
+#lines(bic, type="b", lty = 3)
+best <- fit[[which.min(lplc)]]
+mixturewt(best)
+ass <- apply(mixture(best), 1, which.max)
+
+ for (k in seq(ncol(fitted(best)))) {
+     d <- melt(fitted(best))
+     colnames(d) <- c("OTU", "cluster", "value")
+     d <- subset(d, cluster == k) %>%
+         # Arrange OTUs by assignment strength
+         arrange(value) %>%
+         mutate(OTU = factor(OTU, levels = unique(OTU))) %>%
+         # Only show the most important drivers
+         filter(abs(value) > 1)     
+     
+     p <- ggplot(d, aes(x = OTU, y = value)) +
+         geom_bar(stat = "identity") +
+         coord_flip() +
+         labs(title = paste("Top drivers: community type", k))
+     print(p)
+ }
+
+rp<- cbind(t(gp), meta(genus1))
+rp$type<- paste("URT-Type", ass)
+
+rp.data <- rp[,c("Streptococcus", "Prevotella", "Neisseria", "Actinobacillus", "Gemella", "Veillonella",  "stage", "type")]
+palette <- c('#e31a1c','#6a3d9a','#1f78b4','#33a02c', '#ff7f00', "#535353")
+test <- melt(rp.data)
+test$stages <- as.numeric(substr(test$stage,6,6))
+
+ggplot(test, aes(x=type, y=value/100, fill=variable)) +
+    geom_boxplot()+
+    scale_fill_manual(values=palette) +
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y = "Relative Abundance (log10)", x = "")
+
+####2C
+meta <- meta(genus1)
+meta$Type <- paste("URT-Type", ass)
+ggplot(meta, aes(x = stage, stratum =Type, alluvium = student_id, fill = Type, label = Type)) +
+    theme_bw()+
+    scale_fill_manual(values=c("#1a2937", "#e46c78", "#58588a")) +
+    geom_flow(stat ="alluvium", lode.guidance = "frontback",color ="darkgray") +
+    geom_stratum() 
+
+round(table(rp.data$stage, rp.data$type)/rowSums(table(rp.data$stage, rp.data$type)),4)*100
+
+####2D
+ggplot(data=test, aes(x = stages, y = value/10000, group=variable, color=variable)) +
+    scale_y_continuous(trans = "log10")+
+    geom_smooth(aes(group = variable,color=variable), method = 'loess', size = 1.5)+
+    geom_jitter(alpha=0.5, size=1)+ 
+    scale_color_manual(values=palette) +
+    stat_summary()+
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y = "Relative Abundance (log10)", x = "")
+
+
+####2E
+sp <- read.csv("metagenomics/sp.csv",header = T, sep = ',', row.names = 1)
+tax <- read.csv("metagenomics/tax.csv",header = T, sep = ',', row.names = 1)
+meta <- read.csv("metagenomics/meta.csv",header = T, sep = ',', row.names = 1)
+OTU = otu_table(sp, taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(tax))
+sampledata<- sample_data(meta)
+physeq = merge_phyloseq(OTU, TAX, sampledata)
+
+sps = subset_taxa(physeq, species != "")
+sps.f<- subset_samples(sps, type %in% c("oroph") & stage %in% c("stage1", "stage3"))
+phys = microbiome::transform(sps.f, 'compositional')
+phys <-  prune_taxa(taxa_sums(phys) > 0, phys)
+
+meco_dataset <- phyloseq2meco(phys)
+
+lefse <- trans_diff$new(dataset = meco_dataset, 
+                        method = "lefse", 
+                        group = "stage", 
+                        alpha = 0.05, taxa_level = "species",
+                        p_adjust_method = "none",
+                        lefse_subgroup = NULL)
+
+lefse$plot_diff_bar(threshold = 3, color_values =c("#4e71b9", "#db4d71"), group_order = c("stage1", "stage3"))
+
+
+####s3B
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18") & stage %in% c("stage1", "stage3"))
+physeq.r = rarefy_even_depth(physeq.tib18o, sample.size = 10000, replace = TRUE)
+physeq.r <-  prune_taxa(taxa_sums(physeq.r) > 0, physeq.r)
+genus = tax_glom(physeq.r, "Genus")
+genus1 = filter_taxa(genus, function(x) sum(x > 0) > (0.1*length(x)), TRUE)
+gp <- as.matrix(genus1@otu_table)
+rownames(gp) <- str_split_fixed(as.data.frame(genus1@tax_table)$Genus, 'g_', 2)[,2] 
+count <- as.matrix(t(gp))
+
+counts <- as.data.frame(count[,c("Streptococcus", "Prevotella", "Neisseria", "Actinobacillus", "Gemella", "Veillonella")])
+counts$stage <- meta(genus)$stage
+cou <- melt(counts)
+
+p1 <- ggplot(data=cou, aes(x=stage, y= value/100, fill=stage))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2, size=2)+
+    scale_fill_manual(values= c("#4e71b9", "#db4d71"))+
+    theme_bw()+
+    facet_grid(~variable)+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+
+    theme(legend.position='none')+
+    stat_compare_means(comparisons = list(c("stage1", "stage3")), paired = TRUE)+
+    scale_x_discrete(breaks=c("stage1", "stage3"), labels=c("Pre", "Post"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y="Relative Abundance %") 
+
+
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_18") & stage %in% c("stage4", "stage5"))
+physeq.r = rarefy_even_depth(physeq.tib18o, sample.size = 10000, replace = TRUE)
+physeq.r <-  prune_taxa(taxa_sums(physeq.r) > 0, physeq.r)
+genus = tax_glom(physeq.r, "Genus")
+genus1 = filter_taxa(genus, function(x) sum(x > 0) > (0.1*length(x)), TRUE)
+gp <- as.matrix(genus1@otu_table)
+rownames(gp) <- str_split_fixed(as.data.frame(genus1@tax_table)$Genus, 'g_', 2)[,2] 
+count <- as.matrix(t(gp))
+
+counts <- as.data.frame(count[,c("Streptococcus", "Prevotella", "Neisseria", "Actinobacillus", "Gemella", "Veillonella")])
+counts$stage <- meta(genus)$stage
+cou <- melt(counts)
+
+p2 <- ggplot(data=cou, aes(x=stage, y= value/100, fill=stage))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2, size=2)+
+    scale_fill_manual(values= c("#1b9e77", "#ff944d"))+
+    theme_bw()+
+    facet_grid(~variable)+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+
+    theme(legend.position='none')+
+    stat_compare_means(comparisons = list(c("stage4", "stage5")), paired = TRUE)+
+    scale_x_discrete(breaks=c("stage4", "stage5"), labels=c("Pre", "Post"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y="Relative Abundance %") 
+
+physeq.tib18o<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade %in% c("grade_19"))
+physeq.r = rarefy_even_depth(physeq.tib18o, sample.size = 10000, replace = TRUE)
+physeq.r <-  prune_taxa(taxa_sums(physeq.r) > 0, physeq.r)
+genus = tax_glom(physeq.r, "Genus")
+genus1 = filter_taxa(genus, function(x) sum(x > 0) > (0.1*length(x)), TRUE)
+gp <- as.matrix(genus1@otu_table)
+rownames(gp) <- str_split_fixed(as.data.frame(genus1@tax_table)$Genus, 'g_', 2)[,2] 
+count <- as.matrix(t(gp))
+
+counts <- as.data.frame(count[,c("Streptococcus", "Prevotella", "Neisseria", "Actinobacillus", "Gemella", "Veillonella")])
+counts$stage <- meta(genus)$stage
+cou <- melt(counts)
+
+p3 <- ggplot(data=cou, aes(x=stage, y= value/100, fill=stage))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2, size=2)+
+    scale_fill_manual(values= c("#1b9e77", "#ff944d"))+
+    theme_bw()+
+    facet_grid(~variable)+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+ # 不显示图例的标题
+    theme(legend.position='none')+
+    stat_compare_means(comparisons = list(c("stage4", "stage5")), paired = TRUE)+
+    scale_x_discrete(breaks=c("stage4", "stage5"), labels=c("Pre", "Post"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y="Relative Abundance %") 
+
+
+p1 / p2 / p3
+
+
+####s4B
+
+library(dplyr)
+library(rstatix)
+library(reshape2)
+
+pa <- read.csv("metagenomics/pathway.csv",header = T, sep = ',', row.names = 1)
+meta <- read.csv("metagenomics/meta.csv",header = T, sep = ',', row.names = 1)
+
+
+int <- intersect(colnames(pa), rownames(meta))
+pat <- pa[,int]
+met <- meta[int,]
+met1 <- subset(met, type == "oroph" & stage != "stage2")
+pat1 <-as.data.frame(t(pat[,rownames(met1)]))
+pat1 <- pat1[,which(colSums(pat1) != 0)]
+pat1$stage <- met1$stage
+result1=melt(pat1) %>%
+    group_by(variable) %>%
+    wilcox_test(value ~ stage)
+
+result1$logFC <- log2((colMeans(pat1[rownames(subset(met1, stage == "stage3")),-317])+0.000001)/(colMeans(pat1[rownames(subset(met1, stage == "stage1")),-317])+0.000001))
+result1$label <- ifelse(abs(result1$logFC) > 1 & result1$p < 0.05, as.character(result1$variable), "")
+
+ggplot(
+    result1, aes(x = logFC, y = -log10(p))) +
+    geom_point(alpha=0.8,  size=3, color = "grey") +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    geom_vline(xintercept = c(-1,1),lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.5) +
+    labs(x="log2 (fold change)",
+         y="-log10 (P.value)")+
+    theme_bw()+
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_text_repel(data = result1, aes(x = logFC, y = -log10(p),
+                                      label = label),color = "black",
+                    size = 3, box.padding = unit(0.5, "lines"),
+                    point.padding = unit(0.8, "lines"), 
+                    segment.color = "black", 
+                    show.legend = FALSE)
+
+####s4C
+nam <- c(names(which(result1$label != "")), "stage")
+pat2 <- pat1[,nam]
+pat3 <- melt(pat2)
+
+ggplot(data=pat3, aes(x=stage, y= log10(value), fill=stage))+
+    geom_boxplot()+ 
+    geom_jitter(width=0.2, size=2)+
+    scale_fill_manual(values= c("#4e71b9", "#db4d71"))+
+    theme_bw()+
+    facet_wrap(~variable, scales="free")+
+    theme(axis.text.x = element_text(size=14,angle=0),axis.text.y = element_text(size=14)) + # 设置x.y坐标上文本大小
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + #不显示网格线
+    theme(legend.title = element_blank())+
+    theme(legend.position='none')+
+    stat_compare_means(comparisons = list(c("stage1", "stage3")))+
+    scale_x_discrete(breaks=c("stage1", "stage3"), labels=c("Pre", "Post"))+
+    theme(axis.title.x =element_blank())+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y="Relative Abundance %") 
+
+```

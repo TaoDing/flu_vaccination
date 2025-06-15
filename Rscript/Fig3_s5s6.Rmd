@@ -1,0 +1,443 @@
+---
+title: "Fig-04 & sFig-04"
+output: html_document
+date: "2024-10-14"
+---
+          
+```{r setup, include=FALSE}
+	knitr::opts_chunk$set(echo = TRUE, warning = FALSE, tidy=TRUE, collapse=TRUE)
+```
+
+
+##Figure-4
+
+```{r}
+library(ggplot2)
+library(plyr)
+library(readr)
+library(reshape2)
+library(patchwork) 
+library(cowplot)
+library(ggpubr)
+library(microbiome)
+library(phyloseq)
+library(vegan)
+library(microeco)
+library(file2meco)
+
+load('16S/physeq.tiv16sall.Rdata')
+physeq<- physeq.tiv16sall
+titer<- read.csv("16S/meta_immune_data.csv",header = T, sep = ',')
+
+
+```
+
+
+```{r}
+##sfig5A
+
+titer2017 <- subset(titer, Grade %in% c("G_2018"))
+sub_titer1<- titer2017[c("id","pre_H1N1", "post_H1N1")]
+sub_titer1$id <- factor(sub_titer1$id, levels = sub_titer1$id[order(sub_titer1$pre_H1N1,sub_titer1$post_H1N1)])
+mydata<-melt(sub_titer1,id.vars='id')
+	
+col<- c("#00AFBB", "#FC4E07","#36BED9")
+ggplot(mydata, aes(value,id,fill=variable)) +
+	    geom_line(aes(group = id), size = 1, color="grey") +
+	    geom_point(shape=21,size=3,colour="black")+
+	    scale_fill_manual(values=col)+
+	    theme(
+	        axis.title=element_text(size=13,face="plain",color="white"),
+	        legend.title=element_text(size=12,face="plain",color="black"),
+	        legend.background = element_blank(),
+	        legend.position = c(0.85,0.12))+ 
+	    theme(axis.text.x = element_text(angle=90, hjust=1, vjust=.5))+
+	    scale_x_continuous(limits=c(-1, 10), breaks=seq(0, 10, 1))+ 
+	    coord_flip()+ 
+	    background_grid(major = "xy", minor = "none")+ 
+	    theme(legend.position="none")+
+	    theme(axis.text.y = element_text(size=12))+
+      theme_bw()
+
+
+titer2016 <- subset(titer, Grade %in% c("G_2016", "G_2017"))
+sub_titer1<- titer2016[c("id","pre_H1N1", "post_H1N1")]
+sub_titer1$id <- factor(sub_titer1$id, levels = sub_titer1$id[order(sub_titer1$pre_H1N1,sub_titer1$post_H1N1)])
+mydata<-melt(sub_titer1,id.vars='id')
+
+ggplot(mydata, aes(value,id,fill=variable)) +
+	    geom_line(aes(group = id), size = 1, color="grey") +
+	    geom_point(shape=21,size=3,colour="black")+
+	    scale_fill_manual(values=col)+
+	    theme(
+	        axis.title=element_text(size=13,face="plain",color="white"),
+	        legend.title=element_text(size=12,face="plain",color="black"),
+	        legend.background = element_blank(),
+	        legend.position = c(0.85,0.12))+ 
+	    theme(axis.text.x = element_text(angle=90, hjust=1, vjust=.5))+
+	    scale_x_continuous(limits=c(-1, 10), breaks=seq(0, 10, 1))+ 
+	    coord_flip()+ 
+	    background_grid(major = "xy", minor = "none")+ 
+	    theme(legend.position="none")+
+	    theme(axis.text.y = element_text(size=12))+
+      theme_bw()
+
+
+##sfig5B
+
+sub_titer1<- titer[,c("diff_H1N1", "Grade", "h1n1_pre_group", "BMI", "Gender")]
+sub_titer2<- subset(sub_titer1, Grade == "G_2018" & h1n1_pre_group == "Negative")
+ggplot(data=sub_titer2, aes(x = BMI, y = diff_H1N1)) +
+	        geom_point(alpha=0.6, color="black",size=2)+ 
+	        geom_smooth(method=lm, size=2, color="black")+ 
+	        labs(y= "H1N1 titer change(log)", x="BMI")+
+          theme_bw()+
+	        theme(axis.text.x = element_text(size=14), axis.text.y = element_text(size=14)) +
+	        theme(legend.title = element_blank())+ 
+	        scale_y_continuous(limits=c(0, 10), breaks=seq(0, 10, 1))+
+	        theme(title=element_text(size=14,color="#4F4F4F"))+
+	        theme(legend.position="none")+
+	        stat_cor(data=sub_titer2, method = "spearman", color="black", size=6)
+
+
+my_comparisons <- list(c("Female", "Male"))
+ggplot(sub_titer2, aes(x=Gender,  y=diff_H1N1), shape=8 ) +
+    geom_boxplot(aes(x=Gender, fill=Gender), notch=FALSE) +
+    stat_summary(aes(x=Gender), fun.y=mean, geom="point") +
+    geom_jitter(width=0.2, size=2) +
+    scale_fill_manual(values=c( "#F8766D","#7F7F7F"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    scale_y_continuous(limits=c(0, 11), breaks=seq(0, 10, 2))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons, paired = FALSE, color="black", size=6)+
+    labs(y="")
+
+
+
+##sfig5C
+
+sub_titer<- subset(titer, Grade=="G_2018"&h1n1_pre_group=="Negative")
+sub_titer1<- sub_titer[, c("id", "pre_H1N1", "diff_H1N1")]
+sub_titer1$group<- sub_titer1$diff_H1N1
+sub_titer1$group[sub_titer1$group >5] = "high"
+sub_titer1$group[sub_titer1$group <6] = "low"
+rownames(sub_titer1) <- sub_titer1$id
+student_id<- sub_titer1$id
+physeq.tib<- subset_samples(physeq, national=="tibetan"& grade=="grade_18"&stage=="stage1")
+sample_data(physeq.tib)$human <- get_variable(physeq.tib, "student_id") %in% student_id
+physeq.tib.p<- subset_samples(physeq.tib, human=="TRUE")
+physeq.of<-  prune_taxa(taxa_sums(physeq.tib.p) > 0, physeq.tib.p)
+physeq.of1<- filter_taxa(physeq.of, function(x) sum(x > 3) > 1, TRUE)
+sample_data(physeq.of1)$group <-  sub_titer1[sample_data(physeq.of1)$student_id,]$group
+fo.sh <- plot_richness(physeq.of1, "stage",  measures=NULL)
+shannon.oroph <- fo.sh$data
+shannon.oroph$group <- sub_titer1[as.character(shannon.oroph$student_id),]$group
+sub_shannon.data <- subset(shannon.oroph, variable %in% c("Shannon"))
+
+ggplot(data=sub_shannon.data, aes(x = group, y = value, group=group)) +
+    geom_boxplot(aes(x=group, fill=group), notch=FALSE) +
+    stat_summary(aes(x=group), fun.y=mean, geom="point") +
+    geom_jitter(width=0.2, size=2) +
+    scale_fill_manual(values=c("#E41A1C", "#377EB8")) +
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    facet_wrap(type~., scales = "free", nrow=1)+
+    stat_compare_means(comparisons = list(c("low", "high")), paired = FALSE, color="black")+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+
+
+```{r}
+
+## Figure3A
+
+titer$records <- titer$Grade
+titer$records[titer$Grade %in% c("G_2016", "G_2017")] = "Record"
+titer$records[titer$Grade == "G_2018"] = "no Record"
+
+titer$records <- factor(titer$records, levels = c( "Record","no Record"), ordered=TRUE)
+my_comparisons <- list(c("Record", "no Record"))
+
+ggplot(titer, aes(x=records, y=diff_H1N1), shape=8 ) +
+	    geom_boxplot(aes(x=records, fill=records), notch=FALSE) +
+	    stat_summary(aes(x=records), fun.y=mean, geom="point") +
+	    geom_jitter(width=0.05, height=0, size=2) +
+	    scale_fill_manual(values=c("#b34e7e", "#1b7837"))+
+	    theme(axis.title.x =element_blank())+
+      theme_bw()+
+	    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+	    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+	    theme(legend.title = element_blank())+ 
+	    theme(legend.position='none')+
+	    theme(title=element_text(size=18,color="#4F4F4F"))+
+	    scale_y_continuous(limits=c(0, 11), breaks=seq(0, 10, 2))+
+	    theme(plot.title = element_text(hjust = 0.5))+
+	    stat_compare_means(comparisons = my_comparisons, paired = FALSE, color="black", size=6)+
+	    labs(y="H1N1 titer change (log)", x="")
+
+sub_titer<- titer[,c("pre_H1N1","post_H1N1", "diff_H1N1", "Grade", "h1n1_pre_group")]
+data_3<- na.omit(sub_titer)
+sub_data <- subset(data_3, Grade %in% c("G_2018"))
+
+my_comparisons <- list(c("Negative", "Positive"))
+
+ggplot(sub_data, aes(x=h1n1_pre_group, y=diff_H1N1), shape=8 ) +
+    geom_boxplot(aes(x=h1n1_pre_group, fill=h1n1_pre_group), notch=FALSE) +
+    stat_summary(aes(x=h1n1_pre_group), fun.y=mean, geom="point") +
+    geom_jitter(width=0.05, height=0, size=2) +
+    scale_fill_manual(values=c("#533633", "#149684"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=18,color="#4F4F4F"))+
+    scale_y_continuous(limits=c(0, 11), breaks=seq(0, 10, 2))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons, paired = FALSE, color="black", size=6)+
+    labs(y="", x="")
+
+
+## Figure3C
+
+sub_titer<- subset(titer, Grade=="G_2018"&h1n1_pre_group=="Negative")
+sub_titer1<- sub_titer
+sub_titer1$group<- sub_titer1$diff_H1N1
+sub_titer1$group[sub_titer1$group >5] = "high"
+sub_titer1$group[sub_titer1$group <6] = "low"
+sub_titer2<- sub_titer1[, c(20,22,72)]
+sub_titer3<- melt(data.frame(sub_titer2), id="group")
+my_comparisons <- list(c("low", "high"))
+ggplot(sub_titer3, aes(x=group,  y=value), shape=8 ) +
+    geom_boxplot(aes(x=group, fill=group), notch=FALSE) +
+    stat_summary(aes(x=group), fun.y=mean, geom="point") +
+    geom_jitter(width=0.2, size=2) +
+    scale_fill_manual(values=c("#E41A1C", "#377EB8"))+
+    theme(axis.title.x =element_blank())+
+    theme_bw()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    facet_wrap(.~variable,scales="free", ncol=2)+
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+    stat_compare_means(comparisons = my_comparisons, paired = FALSE)+
+    theme(axis.title.x =element_blank(), axis.title.y =element_blank())+
+    theme(strip.text = element_text(colour = 'black', face = 'bold', size = rel(1.2)), strip.background = element_rect(fill = 'white', colour = 'black', size = rel(2), linetype = 1))
+
+
+## Figure3D
+sub_titer<- subset(titer, Grade=="G_2018"&h1n1_pre_group=="Negative")
+sub_titer1<- sub_titer[, c("id", "pre_H1N1", "diff_H1N1")]
+sub_titer1$group<- sub_titer1$diff_H1N1
+sub_titer1$group[sub_titer1$group >5] = "high"
+sub_titer1$group[sub_titer1$group <6] = "low"
+rownames(sub_titer1) <- sub_titer1$id
+student_id<- sub_titer1$id
+physeq.tib<- subset_samples(physeq, type=="fecal"&national=="tibetan"& grade=="grade_18"&stage=="stage1")
+sample_data(physeq.tib)$human <- get_variable(physeq.tib, "student_id") %in% student_id
+physeq.tib.p<- subset_samples(physeq.tib, human=="TRUE")
+physeq.of<-  prune_taxa(taxa_sums(physeq.tib.p) > 0, physeq.tib.p)
+physeq.of1<- filter_taxa(physeq.of, function(x) sum(x > 3) > 1, TRUE)
+sample_data(physeq.of1)$group <-  sub_titer1[sample_data(physeq.of1)$student_id,]$group
+
+otu<- t(physeq.of1@otu_table@.Data)
+nmds <- metaMDS(otu, distance = 'bray', k = 2)
+
+data.all<- cbind(nmds[["points"]], sub_titer1)
+ggscatter(data.all, x= "MDS1", y = "MDS2", 
+                             color = "group", 
+                             size = 3,
+                             palette = "Set1", 
+                             ellipse = TRUE, 
+                             mean.point = FALSE, 
+                             star.plot = TRUE, 
+                             ellipse.level = FALSE,  
+                             ggtheme = theme_minimal()) +
+    labs(x = "NMDS1", y = "NMDS2") +
+    ggtitle("NMDS")+
+    theme(panel.grid = element_line(color = 'gray', linetype = 2, size = 0.1), panel.background = element_rect(color = 'black', fill = 'transparent'), legend.key = element_rect(fill = 'transparent')) + #去掉背景框
+    geom_vline(xintercept = 0, color = 'gray', size = 0.4) + 
+    geom_hline(yintercept = 0, color = 'gray', size = 0.4) + 
+    theme(axis.text.x = element_text(size=16),axis.text.y = element_text(size=16)) + 
+    labs(title="Bray_Curtis distance of Fecal samples")+
+    theme(title=element_text(size=16,color="#4F4F4F"))+
+    theme(plot.title = element_text(hjust = 0.5))+ 
+  theme(legend.position="none")
+
+dis_bray.f<- phyloseq::distance(physeq.of1, "bray")
+set.seed(002)
+adon.results<-adonis(dis_bray.f~ sub_titer1$group, perm=999)
+knitr::kable(adon.results[["aov.tab"]])
+
+physeq.tib<- subset_samples(physeq, type=="oroph"&national=="tibetan"& grade=="grade_18"&stage=="stage1")
+sample_data(physeq.tib)$human <- get_variable(physeq.tib, "student_id") %in% student_id
+physeq.tib.p<- subset_samples(physeq.tib, human=="TRUE")
+physeq.o<-  prune_taxa(taxa_sums(physeq.tib.p) > 0, physeq.tib.p)
+physeq.o1<- filter_taxa(physeq.o, function(x) sum(x > 3) > 1, TRUE)
+sample_data(physeq.o1)$group <-  sub_titer1[sample_data(physeq.o1)$student_id,]$group
+dis_bray.f<- phyloseq::distance(physeq.o1, "bray")
+set.seed(002)
+adon.results<-adonis(dis_bray.f~ sub_titer1$group, perm=999)
+knitr::kable(adon.results[["aov.tab"]])
+
+
+## Figure3E
+
+sp <- read.csv("metagenomics/sp.csv",header = T, sep = ',', row.names = 1)
+tax <- read.csv("metagenomics/tax.csv",header = T, sep = ',', row.names = 1)
+meta <- read.csv("metagenomics/meta.csv",header = T, sep = ',', row.names = 1)
+OTU = otu_table(sp, taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(tax))
+sampledata<- sample_data(meta)
+physeq = merge_phyloseq(OTU, TAX, sampledata)
+
+sps = subset_taxa(physeq, species != "")
+sps.f<- subset_samples(sps, type %in% c("fecal") & stage %in% c("stage1"))
+phys = microbiome::transform(sps.f, 'compositional')
+phys <-  prune_taxa(taxa_sums(phys) > 0, phys)
+
+meco_dataset <- phyloseq2meco(phys)
+
+lefse <- trans_diff$new(dataset = meco_dataset, 
+                        method = "lefse", 
+                        group = "group", 
+                        alpha = 0.05, taxa_level = "species",
+                        p_adjust_method = "none",
+                        lefse_subgroup = NULL)
+
+lefse$plot_diff_bar(color_values =c("#103d90", "#c3213c"), group_order = c("low", "high"))
+
+```
+
+
+
+
+```{r}
+
+##sfig6C
+library(Hmisc)
+
+sp <- read.csv("metagenomics/sp.csv",header = T, sep = ',', row.names = 1)
+tax <- read.csv("metagenomics/tax.csv",header = T, sep = ',', row.names = 1)
+meta <- read.csv("metagenomics/meta.csv",header = T, sep = ',', row.names = 1)
+OTU = otu_table(sp, taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(tax))
+sampledata<- sample_data(meta)
+physeq = merge_phyloseq(OTU, TAX, sampledata)
+
+sps = subset_taxa(physeq, species != "")
+sps.f<- subset_samples(sps, type %in% c("fecal") & stage %in% c("stage1"))
+phys = microbiome::transform(sps.f, 'compositional')
+phys <-  prune_taxa(taxa_sums(phys) > 0.01, phys)
+phy <- phys@otu_table[which(rowMeans(phys@otu_table) > 0.01),]
+rownames(phy) <- as.data.frame(phys@tax_table)[which(rowMeans(phys@otu_table) > 0.01),]$species
+cortest <- rcorr(as.matrix(t(phy)), type = "spearman", )
+r <- cortest$r
+p <- cortest$P
+r[p > 0.05] <- 0
+corrplot(r, type = 'lower', order = 'hclust', tl.col = 'black', cl.ratio = 0.2, tl.srt = 45, col = COL2('PuOr', 10))
+
+sub_data <- as.data.frame(t(phy))
+
+p1 <- ggplot(data=sub_data, aes(y = s_Prevotella_copri, x = s_Bacteroides_uniformis)) +
+    geom_point(alpha=0.6, color="black",size=3)+ 
+    geom_smooth(method=lm, size=2, color="black")+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    stat_cor(data=sub_data, method = "spearman", color="black")
+
+
+p2 <- ggplot(data=sub_data, aes(y = s_Prevotella_copri, x =s_Parabacteroides_distasonis
+)) +
+    geom_point(alpha=0.6, color="black",size=3)+ 
+    geom_smooth(method=lm, size=2, color="black")+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    stat_cor(data=sub_data, method = "spearman", color="black")
+
+
+p3 <- ggplot(data=sub_data, aes(y = s_Prevotella_copri, x =s_Bacteroides_fragilis
+)) +
+    geom_point(alpha=0.6, color="black",size=3)+ 
+    geom_smooth(method=lm, size=2, color="black")+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    stat_cor(data=sub_data, method = "spearman", color="black")
+
+p4 <- ggplot(data=sub_data, aes(y = s_Prevotella_copri, x =s_Akkermansia_muciniphila
+)) +
+    geom_point(alpha=0.6, color="black",size=3)+ 
+    geom_smooth(method=lm, size=2, color="black")+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    stat_cor(data=sub_data, method = "spearman", color="black")
+
+
+p5 <- ggplot(data=sub_data, aes(y = s_Prevotella_copri, x =s_Escherichia_coli)) +
+    geom_point(alpha=0.6, color="black",size=3)+ 
+    geom_smooth(method=lm, size=2, color="black")+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    stat_cor(data=sub_data, method = "spearman", color="black")
+
+
+p6 <- ggplot(data=sub_data, aes(y = s_Prevotella_copri, x =s_Alistipes_onderdonkii
+)) +
+    geom_point(alpha=0.6, color="black",size=3)+ 
+    geom_smooth(method=lm, size=2, color="black")+ 
+    theme(axis.text.x = element_text(size=12),axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="none")+
+    theme_bw()+
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    stat_cor(data=sub_data, method = "spearman", color="black")
+
+p1 | p2 | p3 | p4 | p5 | p6

@@ -1,0 +1,279 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-09-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+
+```{r}
+library(ggpubr)
+library(reshape2)
+library(ggplot2)
+library(MCPcounter)
+library(genefilter)
+library(GSVA)
+library(Biobase)
+library(stringr)
+library(limma)
+library(clusterProfiler)
+library(xlsx)
+library(pheatmap)
+library(ggrepel)
+library(dplyr)
+library(rstatix)
+library(reshape2)
+library(DESeq2)
+library(psych)
+library(corrplot)
+
+
+mpl <- read.xlsx("metabolite/HRG.vs.LRG_plasma_metabolite.xlsx",sheetIndex = 1, row.names = TRUE, header = TRUE)
+meta.mpl <- read.xlsx("metabolite/HRG.vs.LRG_plasma_metabolite.xlsx",sheetIndex = 2, row.names = TRUE, header = TRUE)
+meta.mpl1 <- subset(meta.mpl, Group.name != "QC")
+mpl1 <- mpl[,rownames(meta.mpl1)]
+
+
+group_list=as.character(meta.mpl1$Group.name)
+design <- model.matrix(~0 + factor(group_list))
+colnames(design)=c("LRG", "HRG")
+rownames(design)=rownames(meta.mpl1)
+y <- voom(mpl1, design, plot = F)
+fit <- lmFit(y, design)
+contrast.matrix <- makeContrasts(LRG - HRG, levels = colnames(coef(fit)))
+fit2 <- contrasts.fit(fit, contrast.matrix) 
+fit2 <- eBayes(fit2)
+tempOutput = topTable(fit2, coef=1, n=Inf)
+nrDEG = na.omit(tempOutput) 
+
+
+nrDEG$label <- ifelse(nrDEG$logFC < 0.5, as.character(mpl[rownames(nrDEG),]$Name), "")
+
+# fig4D
+
+ ggplot(
+    nrDEG, aes(x = logFC, y = -log10(P.Value))) +
+    geom_point(alpha=0.8, size=2) +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    geom_vline(xintercept = c(-0.5,0.5),lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.5) +
+    labs(x="log2 (fold change)",
+         y="-log10 (P.value)")+
+    theme_bw()+
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_text_repel(data = nrDEG, aes(x = logFC, y = -log10(P.Value),
+                                      label = label),color = "black",
+                    size = 3, box.padding = unit(0.5, "lines"),
+                    point.padding = unit(0.8, "lines"), 
+                    segment.color = "black", 
+                    show.legend = FALSE)
+
+ 
+# sfig8A
+
+mgene <- read.csv("RNAseq/Mus.musculus.17sample.RNAseq.csv",header = T, sep = ',', row.names = 1)
+mge <- subset(mgene, GeneType == "protein_coding")
+mgen <- mge[, c(2,12:19)]
+index=order(rowMeans(mgen[,-1]),decreasing = T)
+expr_ordered=mgen[index,]
+keep=!duplicated(expr_ordered$GeneName)
+expr_max_mgen=expr_ordered[keep,]
+rownames(expr_max_mgen) <- expr_max_mgen$GeneName
+expr_max_mgen <- expr_max_mgen[,-1]
+expr <- expr_max_mgen[which(rowSums(expr_max_mgen) > 0),]
+
+
+coldata <- data.frame(condition = factor(rep(c('control', 'treat'), each = 4), levels = c('control', 'treat')))
+
+dds <- DESeqDataSetFromMatrix(countData = expr, colData = coldata, design= ~condition)
+dds1 <- DESeq(dds, fitType = 'mean', minReplicatesForReplace = 7, parallel = FALSE)
+res <- results(dds1, contrast = c('condition', 'treat', 'control'))
+res1 <- data.frame(res, stringsAsFactors = FALSE, check.names = FALSE)
+res2 <- subset(res1, padj != "NA")
+
+name <- c("Ifngr1", "Gzma", "Cxcl2", "Pde4d", "Cd86", "Fasl", "Vegfa"	, "Icos", "Pdcd1", "Spp1", "Tigit", "Cebpb", "Stat4")
+res2$label <- ifelse(rownames(res2) %in% name, as.character(rownames(res2)), "")
+
+ggplot(
+    res2, aes(x = log2FoldChange , y = -log10(pvalue))) +
+    geom_point(alpha=0.5, size=2) +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    geom_vline(xintercept = c(-1.5,1.5),lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.5) +
+    labs(x="log2FC",
+         y="-log10 (P value)")+
+    theme_classic()+
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_label_repel(data = res2, aes(x = log2FoldChange , y = -log10(pvalue),
+                                     label = label),color = "black",
+                     size = 3,
+                     point.padding = unit(0.1, "lines"), 
+                     segment.color = "black", 
+                     show.legend = FALSE, max.overlaps = 2000)
+
+# fig6E, sfig8B-C
+gmt <- read.gmt("RNAseq/m5.go.bp.v2023.1.Mm.symbols.gmt")
+# gmt$gene <- str_to_title(gmt$gene)
+geneList <- res2$log2FoldChange
+names(geneList) <- rownames(res2)
+geneList=sort(geneList,decreasing = T)
+set.seed(001)
+gsea.1 <- GSEA(geneList,
+               TERM2GENE = gmt, pvalueCutoff=1) 
+
+##
+gse <- gsea.1@result
+names <- c("GOBP_POSITIVE_REGULATION_OF_T_HELPER_CELL_DIFFERENTIATION", "GOBP_ANTIMICROBIAL_HUMORAL_RESPONSE", "GOBP_MYELOID_LEUKOCYTE_MIGRATION", "GOBP_VENOUS_BLOOD_VESSEL_DEVELOPMENT", "GOBP_HUMORAL_IMMUNE_RESPONSE", "GOBP_LYMPH_VESSEL_DEVELOPMENT", "GOBP_POSITIVE_REGULATION_OF_HUMORAL_IMMUNE_RESPONSE", "GOBP_POSITIVE_REGULATION_OF_PLATELET_ACTIVATION", "GOBP_POSITIVE_REGULATION_OF_LEUKOCYTE_PROLIFERATION", "GOBP_POSITIVE_REGULATION_OF_LYMPHOCYTE_DIFFERENTIATION", "GOBP_T_HELPER_1_TYPE_IMMUNE_RESPONSE", "GOBP_LEUKOCYTE_MIGRATION", "GOBP_LEUKOCYTE_CHEMOTAXIS", "GOBP_POSITIVE_REGULATION_OF_CELL_CELL_ADHESION", "GOBP_LEUKOCYTE_CELL_CELL_ADHESION", "GOBP_GRANULOCYTE_CHEMOTAXIS", "GOBP_IMMUNE_SYSTEM_DEVELOPMENT")
+gse$label <- ifelse(gse$ID %in% names, as.character(gse$ID), "")
+
+ggplot(
+    gse, aes(x = NES, y = -log10(p.adjust))) +
+    geom_point(alpha=0.8, size=2) +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    geom_vline(xintercept = c(-1.5,1.5),lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.5) +
+    labs(x="NES",
+         y="-log10 (adjust P)")+
+    theme_bw()+
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_label_repel(data = gse, aes(x = NES, y = -log10(p.adjust),
+                                      label = label),color = "black",
+                    size = 3, box.padding = unit(0.5, "lines"),
+                    point.padding = unit(0.1, "lines"), 
+                    segment.color = "black", 
+                    show.legend = FALSE, max.overlaps = 2000)
+
+
+mygene <- intersect(rownames(res1)[which(res1$padj < 0.05)], strsplit(gsea.1@result["GOBP_HUMORAL_IMMUNE_RESPONSE",]$core_enrichment, "/")[[1]])
+gseaNb(object = gsea.1,
+       geneSetID = "GOBP_HUMORAL_IMMUNE_RESPONSE",  
+       addGene = mygene,
+       addPval = T,
+       pvalX = 0.75,pvalY = 0.8,
+       pCol = 'black',
+       pHjust = 0)
+
+ge1 <- expr[mygene,]
+pheatmap(
+    ge1, cluster_rows = TRUE,
+    cluster_cols = FALSE,
+    scale = "row",
+    color = colorRampPalette(c("navy", "white", "firebrick3"))(50), 
+    border = FALSE)
+
+
+mygene <- intersect(rownames(res1)[which(res1$padj < 0.05)], strsplit(gsea.1@result["GOBP_LEUKOCYTE_MIGRATION",]$core_enrichment, "/")[[1]])
+gseaNb(object = gsea.1,
+       geneSetID = "GOBP_LEUKOCYTE_MIGRATION",  
+       addGene = mygene,
+       addPval = T,
+       pvalX = 0.75,pvalY = 0.8,
+       pCol = 'black',
+       pHjust = 0)
+
+ge1 <- expr[mygene,]
+pheatmap(
+    ge1, cluster_rows = TRUE,
+    cluster_cols = FALSE,
+    scale = "row",
+    color = colorRampPalette(c("navy", "white", "firebrick3"))(50), 
+    border = FALSE)
+
+mygene <- intersect(rownames(res1)[which(res1$padj < 0.05)], strsplit(gsea.1@result["GOBP_LEUKOCYTE_CHEMOTAXIS",]$core_enrichment, "/")[[1]])
+gseaNb(object = gsea.1,
+       geneSetID = "GOBP_LEUKOCYTE_CHEMOTAXIS",  
+       addGene = mygene,
+       addPval = T,
+       pvalX = 0.75,pvalY = 0.8,
+       pCol = 'black',
+       pHjust = 0)
+
+ge1 <- expr[mygene,]
+pheatmap(
+    ge1, cluster_rows = TRUE,
+    cluster_cols = FALSE,
+    scale = "row",
+    color = colorRampPalette(c("navy", "white", "firebrick3"))(50), 
+    border = FALSE)
+
+mygene <- intersect(rownames(res1)[which(res1$padj < 0.05)], strsplit(gsea.1@result["GOBP_POSITIVE_REGULATION_OF_CELL_CELL_ADHESION",]$core_enrichment, "/")[[1]])
+gseaNb(object = gsea.1,
+       geneSetID = "GOBP_POSITIVE_REGULATION_OF_CELL_CELL_ADHESION",  
+       addGene = mygene,
+       addPval = T,
+       pvalX = 0.75,pvalY = 0.8,
+       pCol = 'black',
+       pHjust = 0)
+
+ge1 <- expr[mygene,]
+pheatmap(
+    ge1, cluster_rows = TRUE,
+    cluster_cols = FALSE,
+    scale = "row",
+    color = colorRampPalette(c("navy", "white", "firebrick3"))(50), 
+    border = FALSE)
+
+# fig6D
+library(ImmuCellAImouse)
+group <- as.data.frame(t(coldata))
+colnames(group) <- colnames(expr)
+exp <- rbind(group, expr)
+
+test <- ImmuCellAI_mouse(sample =exp,
+                     data_type = "rnaseq",
+                     group_tag = 1,
+                     customer=FALSE)
+
+tt <- as.data.frame(test[["abundance"]])
+tt$group <- rep(c('control', 'treat'), each = 4)
+result=melt(tt) %>%
+  group_by(variable) %>%
+  t_test(value ~ group) %>%
+  adjust_pvalue(method = "fdr")
+
+order <- result$variable[order(result$statistic)]
+
+result$label <- ifelse(result$p < 0.05, as.character(result$variable), "")
+
+ggplot(
+    result, aes(x = statistic, y = -log10(p))) +
+    geom_point(alpha=0.8, size=2) +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    geom_vline(xintercept = c(-1.5,1.5),lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.5) +
+    labs(x="log2FC",
+         y="-log10 (p value)")+
+    theme_classic()+
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_label_repel(data = result, aes(x = statistic, y = -log10(p),
+                                        label = label),color = "black",
+                     size = 3, box.padding = unit(0.5, "lines"),
+                     point.padding = unit(0.1, "lines"), 
+                     segment.color = "black", 
+                     show.legend = FALSE, max.overlaps = 2000)
+pheatmap(
+    test$abundance[,order], cluster_rows = FALSE,
+    cluster_cols = FALSE,
+    scale = "column",show_rownames = FALSE,
+    color = colorRampPalette(c("navy", "white", "firebrick3"))(50), 
+    border = FALSE)
+
+```

@@ -1,0 +1,33 @@
+ID,groups
+Gender,Demographic data
+TIV_records,Demographic data
+BMI,Demographic data
+Age,Demographic data
+diff_H1N1,Vaccination response
+diff_H3N2,Vaccination response
+Mumps.titer,Vaccination response
+Rubella.titer,Vaccination response
+Measles.titer,Vaccination response
+Varicella.titer,Vaccination response
+CD4T,CD4+ T subsets
+Activated.CD4T,CD4+ T activation
+CD4TEMRA,CD4+ T subsets
+Naive.CD4T,CD4+ T subsets
+CD4TCM,CD4+ T subsets
+CD4TEM,CD4+ T subsets
+IFNg.in.CD4T,CD4+ T activation
+IL17.in.CD4T,CD4+ T activation
+TNFa.in.CD4T,CD4+ T activation
+CD8T,CD8+ T subsets
+Activated.CD8T,CD8+ T activation
+CD8TEMRA,CD8+ T subsets
+Naive.CD8T,CD8+ T subsets
+CD8TCM,CD8+ T subsets
+CD8TEM,CD8+ T subsets
+IFNg.in.CD8T,CD8+ T activation
+IL17.in.CD8T,CD8+ T activation
+TNFa.in.CD8T,CD8+ T activation
+Switched.Memory.B,B cell subsets
+Unswitched.Memory.B,B cell subsets
+Naive.B,B cell subsets
+Immature.B,B cell subsets

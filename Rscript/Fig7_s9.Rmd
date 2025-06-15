@@ -1,0 +1,169 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-09-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+
+```{r}
+library(ggpubr)
+library(reshape2)
+library(ggplot2)
+library(MCPcounter)
+library(genefilter)
+library(GSVA)
+library(Biobase)
+library(stringr)
+library(limma)
+library(clusterProfiler)
+library(xlsx)
+library(pheatmap)
+library(ggrepel)
+library(dplyr)
+library(rstatix)
+library(reshape2)
+library(DESeq2)
+library(psych)
+library(corrplot)
+library(org.Mm.eg.db)
+library(AnnoProbe)
+library(GseaVis)
+```
+
+
+
+```{r}
+
+mgene <- read.csv("RNAseq/GCB.RNAseq.csv",header = T, sep = ',', row.names = 1)
+expr <- mgene[which(rowMeans(mgene) > 2),]
+
+#ID转换
+ids=annoGene(rownames(expr),'ENSEMBL','mouse')
+rownames(ids) <- ids$ENSEMBL
+exp <- cbind(expr, ids[rownames(expr),])
+mge <- subset(exp, biotypes == "protein_coding")
+mgen <- mge[, c(7,1:6)]
+index=order(rowMeans(mgen[,-1]),decreasing = T)
+expr_ordered=mgen[index,]
+keep=!duplicated(expr_ordered$SYMBOL)
+expr_max_mgen=expr_ordered[keep,]
+rownames(expr_max_mgen) <- expr_max_mgen$SYMBOL
+expr_max_mgen <- expr_max_mgen[,-1]
+expp <- expr_max_mgen[which(rowSums(expr_max_mgen) > 0),]
+rownames(expp) <- toupper(rownames(expp))
+
+##deg
+exp1 <- expp[, c(1:6)]
+coldata <- data.frame(condition = factor(rep(c('control', 'treat'), each = 3), levels = c('control', 'treat')))
+dds <- DESeqDataSetFromMatrix(countData = exp1, colData = coldata, design= ~condition)
+dds1 <- DESeq(dds, fitType = 'mean', minReplicatesForReplace = 7, parallel = FALSE)
+res <- results(dds1, contrast = c('condition', 'treat', 'control'))
+res1 <- data.frame(res, stringsAsFactors = FALSE, check.names = FALSE)
+res2 <- subset(res1, padj != "NA")
+
+name <- c("ACVR2A", "ALDOC", "CCL17", "CDKN1A", "COX17", "CSF2RB", "CXCL10",   
+                  "FDFT1", "FDPS", "FDX1", "FFAR2", "FGL2", "GBP6", "IFIT2",   
+                  "IL10", "IL15", "LAMP3", "LDLR", "LSS", "LYSMD2", "MVD",   
+                  "NDUFA3", "NOD1", "PTGIR", "TNFSF9", "TPBG") 
+res2$label <- ifelse(rownames(res2) %in% name, as.character(rownames(res2)), "")
+
+##SFig9B
+
+ggplot(
+    res2, aes(x = log2FoldChange , y = -log10(pvalue))) +
+    geom_point(alpha=0.5, size=2) +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    geom_vline(xintercept = c(-1.5,1.5),lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.5) +
+    labs(x="log2FC",
+         y="-log10 (P value)")+
+    theme_classic()+
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_label_repel(data = res2, aes(x = log2FoldChange , y = -log10(pvalue),
+                                     label = label),color = "black",
+                     size = 3,
+                     point.padding = unit(0.1, "lines"), 
+                     segment.color = "black", 
+                     show.legend = FALSE, max.overlaps = 2000)
+
+gmt <- read.gmt("RNAseq/h.all.v2024.1.Hs.symbols.gmt")
+geneList <- res1$log2FoldChange
+names(geneList) <- rownames(res1)
+geneList=sort(geneList,decreasing = T)
+set.seed(001)
+gsea.3 <- GSEA(geneList,
+               TERM2GENE = gmt, pvalueCutoff=1) 
+
+gse <- gsea.3@result
+names <- c("HALLMARK_OXIDATIVE_PHOSPHORYLATION", "HALLMARK_CHOLESTEROL_HOMEOSTASIS")
+gse$label <- ifelse(gse$ID %in% names, as.character(gse$ID), "")
+
+ggplot(
+    gse, aes(x = NES, y = -log10(pvalue))) +
+    geom_point(alpha=0.8, size=2) +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    geom_vline(xintercept = c(0),lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.05),lty=2,col="black",lwd=0.5) +
+    labs(x="NES",
+         y="-log10 (P value)")+
+    theme_bw()+
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_label_repel(data = gse, aes(x = NES, y = -log10(pvalue),
+                                      label = label),color = "black",
+                    size = 3, box.padding = unit(0.5, "lines"),
+                    point.padding = unit(0.1, "lines"), 
+                    segment.color = "black", 
+                    show.legend = FALSE, max.overlaps = 2000)
+
+##Fig7B, sFig9C
+
+mygene <- intersect(rownames(res1)[which(res1$pvalue < 0.05)], strsplit(gsea.3@result$core_enrichment[2], "/")[[1]])
+gseaNb(object = gsea.3,
+       geneSetID = "HALLMARK_OXIDATIVE_PHOSPHORYLATION",  
+       addGene = mygene,
+       addPval = T,
+       pvalX = 0.75,pvalY = 0.8,
+       pCol = 'black',
+       pHjust = 0)
+
+ge1 <- exp1[mygene,]
+pheatmap(
+    ge1, cluster_rows = TRUE,
+    cluster_cols = FALSE,
+    scale = "row",
+    color = colorRampPalette(c("navy", "white", "firebrick3"))(50), 
+    border = FALSE)
+
+mygene <- intersect(rownames(res1)[which(res1$pvalue < 0.05)], strsplit(gsea.3@result$core_enrichment[3], "/")[[1]])
+gseaNb(object = gsea.3,
+       geneSetID = "HALLMARK_CHOLESTEROL_HOMEOSTASIS",  
+       addGene = mygene,
+       addPval = T,
+       pvalX = 0.75,pvalY = 0.8,
+       pCol = 'black',
+       pHjust = 0)
+
+ge1 <- exp1[mygene,]
+pheatmap(
+    ge1, cluster_rows = TRUE,
+    cluster_cols = FALSE,
+    scale = "row",
+    color = colorRampPalette(c("navy", "white", "firebrick3"))(50), 
+    border = FALSE)
+
+
+```
+
