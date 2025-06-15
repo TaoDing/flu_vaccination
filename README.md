@@ -1,4 +1,4 @@
-### Joint contribution of gut and respiratory microbial communities in the immune response to seasonal influenza vaccination
+### Segatella copri enhances influenza vaccine response by restricting gut microbiota-derived phenylacetylglutamine
 
 
 
@@ -6,33 +6,40 @@
 
 **R.code**: R scripts used to reproduce all statistical results and visualized pictures.
 
-**Source Data**: Including species feature table and subject's metadata.
+**Source Data**: The original data analyzed using R are located in the Data folder. 
 
 **Processiong Data**:
 
-Figure 1.  Prevalence of gut *Prevotella copri* significantly correlated with TIV-specific antibody production.
+Figure 1. The impact of influenza vaccination on the respiratory microbiota is greater than that on the gut
 
-Figure 2.  Multi-omics analysis revealed that gut *P. copri* and *A. megaguti*-associated L-lysine metabolism strengthened the TIV vaccination response.
+Figure 2. Longitudinal dynamics of gut and upper respiratory tract microbes induced by TIV vaccination
 
-Figure 3.  Influenza vaccination has a greater impact on the URT microbiota than the gut microbiota.
+Figure 3. Gut microbiota particularly Segatella copri are associated with an enhanced antibody response to vaccinations
 
-Figure 4.  URT microbes are enriched in the gut and interact with the gut microbiota.
+Figure 4. S. copri enhances TIV immunogenicity through its relation to PAGln levels
 
-Figure 5.  TIV vaccination is associated with an increase in Streptococcus and loss of some species in the URT. 
+Figure 5. S. copri enhances specific antibody levels by suppressing the production of PAGln by gut microbiota
 
-Figure 6.  TIV vaccination reshapes the URT microbiota, affecting functional gene expression. 
+Figure 6. PAGln weakens the specific antibody levels by affecting the function of germinal center B cells
 
-Extended Data Figure 1. Detection of H1N1-specific antibodies and correlation analysis between the antibody titer and host or microbial factors.
+Extended Data Fig.1. Diversity and compositional characteristics of respiratory and gut microbiota before and after vaccination
 
-Extended Data Figure 2. Multi-omics analysis framework and inter-omics variable association analysis.
+Extended Data Fig.2. Vaccination led to changes in microbial interaction network and species abundance of Bifidobacterium
 
-Extended Data Figure 3. PERMANOVA analysis between pre- vaccination and post-vaccination.
+Extended Data Fig.3. Dirichlet Multinomial Mixtures model and changes in the relative abundance of key microbes in URT
 
-Extended Data Figure 4. Vaccination led to changes in microbial interaction network and species abundance of *Bifidobacterium*.
+Extended Data Fig.4. Vaccination led to changes in microbial interaction network and species abundance of Bifidobacterium
 
-Extended Data Figure 5. Impact of vaccination on the abundance and microbial interaction network of dominant microbes in the upper respiratory tract.
+Extended Data Fig.5. Detection of H1N1-specific antibodies and correlation analysis between the antibody titer and host or microbial factors
 
-Extended Data Figure 6. Vaccination affected the association between abundances of microbes and microbial gene function. 
+Extended Data Fig.6. Analysis of the association between S. copri, PAA, PAGln, and key gut species
+
+Extended Data Fig.7. S. copri enhances TIV response by restricting production of PAGln
+
+Extended Data Fig. 8. Gene expression and functional characteristics of the spleen following PAGln injection
+
+Extended Data Fig.9. Gene expression and functional characteristics of the GCB cells in the spleen following PAGln injection
+ 
 
 ### Data Availability:
 
